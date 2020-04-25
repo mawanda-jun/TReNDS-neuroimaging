@@ -1,5 +1,7 @@
 # Articles
 ## sMRI SBC
-Possiamo scrivere un estratto dall'articolo. [Riferimento](link) 
+Independent component analysis (ICA) is a popular statistical and computational technique for biomedical signal analysis. The biomedical signals that we can measure are often mixtures of signals from different underlying “sources,” including both noise or signals of interest. ICA works by decomposing the mixed signals into maximally independent components. ICA has shown considerable promise for the analysis of fMRI [Calhoun and Adali, 2006] and EEG data [Makeig et al., 1997] and also for segmenting the gray matter and white matter in sMRI [Nakai et al., 2004]. Here we propose the use of ICA to extract maximally spatially independent sources revealing patterns of variation that occur in sMRI images and to identify sMRI differences between patients and healthy controls. We hypothesized that a small number of sources in the brain would show differences between patients and healthy controls. Under this assumption, we can apply ICA to the preprocessed sMRI images, identify the sources, and perform statistical analysis to identify which sources distinguish patients from healthy controls. We refer to this straightforward but effective approach as source-based morphometry 
+(SBM).  
+[Source-Based Morphometry: The Use of Independent Component Analysis to Identify Gray Matter Differences With Application to Schizophrenia](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2751641/) 
 
 ## FNC 
