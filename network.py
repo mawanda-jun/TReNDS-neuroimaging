@@ -22,7 +22,7 @@ class ShallowNet(nn.Module):
         fnc = inputs['fnc']
         sbm = inputs['sbm']
         # strato 1: FC+ReLu
-        x = self.FC1(torch.cat([fnc, sbm]))
+        x = self.FC1(torch.cat([fnc, sbm], dim=1))
         x = F.relu(x)
         # strato 2: FC+dropout+ReLu
         x = self.FC2(x)
@@ -54,6 +54,9 @@ def train_batch(net, train_loader, loss_fn, metric_fn, optimizer, DEVICE):
 
         # backward pass
         loss.backward()
+
+        # update optimizer
+        optimizer.step()
 
         return loss, metric
 
