@@ -13,30 +13,33 @@ class ShallowNet(nn.Module):
         super(ShallowNet, self).__init__()
 
         # definiamo i layer della rete
-        self.FC1 = nn.Linear(in_features=fnc_dim+sbm_dim, out_features=2048)
-        self.FC2 = nn.Linear(in_features=2048, out_features=3072)
-        self.FC3 = nn.Linear(in_features=3072, out_features=1024)
-        self.drop = nn.Dropout(p=dropout_prob)
-        self.regressor = nn.Linear(in_features=1024, out_features=5)
+        self.FC1 = nn.Linear(in_features=fnc_dim+sbm_dim, out_features=512)
+        self.FC2 = nn.Linear(in_features=512, out_features=1024)
+        self.FC3 = nn.Linear(in_features=1024, out_features=512)
+        self.drop1 = nn.Dropout(p=0.)
+        self.drop2 = nn.Dropout(p=dropout_prob)
+        self.drop3 = nn.Dropout(p=dropout_prob)
+        self.regressor = nn.Linear(in_features=512, out_features=5)
 
     def forward(self, inputs, mask=None):
         fnc = inputs['fnc']
         sbm = inputs['sbm']
-        # strato 1: FC+ReLu
+        # strato 1: FC+dropout]ReLu
         x = self.FC1(torch.cat([fnc, sbm], dim=1))
+        x = self.drop1(x)
         x = F.relu(x)
         # strato 2: FC+dropout+ReLu
         x = self.FC2(x)
-        x = self.drop(x)
+        x = self.drop2(x)
         x = F.relu(x)
         # strato 3: FC+dropout.ReLu
         x = self.FC3(x)
-        x = self.drop(x)
+        x = self.drop3(x)
         x = F.relu(x)
         # strato 4: regressore
         x = self.regressor(x)
 
-        return x
+        return F.relu(x)
 
 
 def train_batch(net, train_loader, loss_fn, metric_fn, optimizer, DEVICE):
