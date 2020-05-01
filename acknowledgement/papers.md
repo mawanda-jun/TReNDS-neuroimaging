@@ -9,6 +9,9 @@ Independent component analysis (ICA) is a popular statistical and computational 
 
 ## FNC 
 
+# fMRI
+
+
 ## Architectures and pre-processing
 ### Useful for pre-processing
 - [Modeling 4D fMRI Data via Spatio-Temporal Convolutional Neural Networks (ST-CNN)](https://arxiv.org/pdf/1805.12564.pdf)
