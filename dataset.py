@@ -27,9 +27,6 @@ class TReNDS_dataset(Dataset):
         self.labels = {Id: np.array(train_scores.loc[train_scores['Id'] == Id]) for Id in self.mat_paths.keys()} if train_scores_path else None
 
         # Test code to verify if there are all the labels for each type of data
-        mat_keys = list(self.mat_paths.keys())
-        for k in mat_keys:
-            open(os.path.join(mat_folder, '..', 'asdrubale', 'fMRI_test', str(k)+'.mat'), 'w').write('ciao')
         # fnc_keys = list(fnc['Id'])
         # sbm_keys = list(sbm['Id'])
         # print(len(mat_keys), len(fnc_keys), len(sbm_keys))
