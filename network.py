@@ -14,9 +14,10 @@ class ShallowNet(nn.Module):
 
         # definiamo i layer della rete
         self.FC1 = nn.Linear(in_features=fnc_dim+sbm_dim, out_features=2048)
-        self.FC2 = nn.Linear(in_features=2048, out_features=1048)
+        self.FC2 = nn.Linear(in_features=2048, out_features=3072)
+        self.FC3 = nn.Linear(in_features=3072, out_features=1024)
         self.drop = nn.Dropout(p=dropout_prob)
-        self.regressor = nn.Linear(in_features=1048, out_features=5)
+        self.regressor = nn.Linear(in_features=1024, out_features=5)
 
     def forward(self, inputs, mask=None):
         fnc = inputs['fnc']
@@ -28,7 +29,11 @@ class ShallowNet(nn.Module):
         x = self.FC2(x)
         x = self.drop(x)
         x = F.relu(x)
-        # strato 3: regressore
+        # strato 3: FC+dropout.ReLu
+        x = self.FC3(x)
+        x = self.drop(x)
+        x = F.relu(x)
+        # strato 4: regressore
         x = self.regressor(x)
 
         return x
