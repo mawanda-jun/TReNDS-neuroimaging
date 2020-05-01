@@ -32,3 +32,62 @@ class ShallowNet(nn.Module):
         x = self.regressor(x)
 
         return x
+
+
+def train_batch(net, train_loader, loss_fn, metric_fn, optimizer, DEVICE):
+    net.train()
+    for batch in train_loader:
+        net_input = {'fnc': batch['fnc'].to(DEVICE),
+                     'sbm': batch['sbm'].to(DEVICE)
+                     }
+        labels = batch['label'].to(DEVICE)
+
+        # forward pass
+        net_output = net(net_input)
+
+        # update networks
+        loss = loss_fn(net_output, labels)
+        metric = metric_fn(net_output, labels)
+
+        # clear previous recorded gradients
+        optimizer.zero_grad()
+
+        # backward pass
+        loss.backward()
+
+        return loss, metric
+
+
+def val_batch(net, val_loader, loss_fn, metric_fn, DEVICE):
+    net.eval()
+    conc_output = []
+    conc_label = []
+
+    for batch in val_loader:
+        net_input = {'fnc': batch['fnc'].to(DEVICE),
+                     'sbm': batch['sbm'].to(DEVICE)
+                     }
+        labels = batch['label'].to(DEVICE)
+
+        # evaluate the network over the input
+        net_output = net(net_input)
+
+        conc_output.append(net_output)
+        conc_label.append(labels)
+
+    conc_output = torch.cat(conc_output)
+    conc_label = torch.cat(conc_label)
+
+    loss = loss_fn(conc_output, conc_label)
+    metric = metric_fn(conc_output, conc_label)
+
+    return loss, metric
+
+
+
+
+
+
+
+
+
