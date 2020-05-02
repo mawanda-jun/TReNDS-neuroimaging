@@ -12,10 +12,12 @@ class TReNDSMetrics(torch.nn.Module):
 
     def __init__(self):
         super(TReNDSMetrics, self).__init__()
-        self.weights = torch.tensor([.3, .175, .175, .175, .175], dtype=torch.float64, device=DEVICE)
+        self.weights = torch.tensor([.3, .175, .175, .175, .175], dtype=torch.float32, device=DEVICE)
 
     def __loss(self, output, target):
-        return torch.sum(self.weights * torch.sum(torch.abs(output-target)) / torch.sum(target))
+        nom = torch.sum(torch.abs(output-target), dim=0)
+        denom = torch.sum(target, dim=0)
+        return torch.sum(self.weights * nom / denom)
 
     def forward(self, output: torch.Tensor, target: torch.Tensor, **kwargs):
         return self.__loss(output, target)
@@ -39,26 +41,27 @@ class EarlyStopping:
         self.counter = 0
         self.best_score = None
         self.early_stop = False
-        self.val_loss_min = np.Inf
+        self.val_metric_min = np.Inf  # The lower the better
         self.delta = delta
         self.save_checkpoint = False
 
-    def __call__(self, train_loss, val_loss, model=None):
-
-        score = -val_loss
+    def __call__(self, train_metric, val_metric, model=None):
+        # Metric: the lower the better -> score: the higher the better
+        val_score = - val_metric
+        train_score = - train_metric
 
         if self.best_score is None:
-            self.best_score = score
+            self.best_score = val_score
             self.save_checkpoint = True
-            self.val_loss_min = val_loss
-        elif score < self.best_score + self.delta and train_loss < val_loss:
+            self.val_metric_min = val_metric
+        elif val_score < self.best_score + self.delta or train_score > val_score + self.delta:
             self.counter += 1
             # print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
                 self.early_stop = True
             self.save_checkpoint = False
         else:
-            self.best_score = score
+            self.best_score = val_score
             self.save_checkpoint = True
-            self.val_loss_min = val_loss
+            self.val_metric_min = val_metric
             self.counter = 0
