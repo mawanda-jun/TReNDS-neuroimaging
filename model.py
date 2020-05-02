@@ -97,9 +97,9 @@ class Model:
             elapsed_seconds = start_epoch.elapsed_time(
                         end_epoch) / 1000
             elapsed_minutes = elapsed_seconds // 60
-            elapsed_seconds = elapsed_seconds % 60
+            elapsed_seconds = round(elapsed_seconds % 60)
             print(
-                "\nEpoch: {}\ttrain metric: {:.4f} loss: {:.4f}\t\tval metric: {:.4f} loss: {:.4f}\ttime: {:.4}m{:.4}s".format(
+                "\nEpoch: {}\ttrain metric: {:.4f} loss: {:.4f}\t\tval metric: {:.4f} loss: {:.4}\ttime: {:.0f}m{:.0f}s".format(
                     epoch+1,
                     train_metric,
                     train_loss,
