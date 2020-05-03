@@ -72,8 +72,7 @@ class DenseNet3D(nn.Module):
             ('conv1', nn.Conv3d(num_init_features, num_init_features, kernel_size=3, stride=1, padding=1, bias=False)),
             ('norm1', nn.BatchNorm3d(num_init_features)),
             ('relu1', nn.ReLU(inplace=True)),
-            ('conv2', nn.Conv3d(num_init_features, num_init_features, kernel_size=3, stride=1, padding=1, bias=False)),
-        ]))
+            ('conv2', nn.Conv3d(num_init_features, num_init_features, kernel_size=3, stride=1, padding=1, bias=False)),]))
         self.features_bn = nn.Sequential(OrderedDict([
             ('norm2', nn.BatchNorm3d(num_init_features)),
             ('relu2', nn.ReLU(inplace=True)),
@@ -102,19 +101,17 @@ class DenseNet3D(nn.Module):
             # self.upsampling_blocks.append(up_block)
 
             if i != len(block_config) - 1:
-
-
                 trans = _Transition(num_input_features=num_features, num_output_features=num_features // 2)
                 self.transit_blocks.append(trans)
                 #self.features.add_module('transition%d' % (i + 1), trans)
                 num_features = num_features // 2
 
         # Final batch norm
-        #self.features.add_module('norm5', nn.BatchNorm3d(num_features))
+        # self.features.add_module('norm5', nn.BatchNorm3d(num_features))
 
         # Linear layer
-        #self.classifier = nn.Linear(num_features, num_classes)
-        #self.bn4 = nn.BatchNorm3d(num_features)
+        # self.classifier = nn.Linear(num_features, num_classes)
+        # self.bn4 = nn.BatchNorm3d(num_features)
 
 
         # ----------------------- classifier -----------------------
@@ -157,5 +154,9 @@ class DenseNet3D(nn.Module):
         # ----------------------- classifier -----------------------
         # out = self.conv_class(F.relu(self.bn_class(out)))
         # ----------------------------------------------------------
+
+        # ----------------------- regressor ------------------------
+        out = F.relu(out, inplace=True)
+        out = F.adaptive_avg_pool3d(out, output_size=(1, 1, 1)).view(out.size(0), -1)
 
         return out

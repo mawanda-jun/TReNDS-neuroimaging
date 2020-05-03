@@ -52,7 +52,7 @@ if __name__ == '__main__':
     learning_rate = 5e-5
     batch_size = 32
     dropout_prob = 0.3
-    patience = 5
+    patience = 10
 
     # Define network hyper params
     net_hyperparams = {
@@ -60,8 +60,8 @@ if __name__ == '__main__':
     }
 
     # Define train and val loaders
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=4)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=4)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=6)
+    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=6)
 
     # Define model
     model = Model(network_type, net_hyperparams, optimizer, loss, lr=learning_rate)
@@ -74,7 +74,7 @@ if __name__ == '__main__':
                             '_lr.' + str(learning_rate) +
                             '_drop.' + str(dropout_prob) +
                             '_patience.' + str(patience) +
-                            '_other_net.' + str(0))
+                            '_other_net.' + str(1))
     os.makedirs(run_path, exist_ok=False)
 
     # Train model

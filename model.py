@@ -1,4 +1,4 @@
-from network import ShallowNet, SmartDense3D
+from network import ShallowNet, CustomDenseNet3D, CustomResNet3D
 from pytorchtools import EarlyStopping, TReNDSMetrics
 
 import os
@@ -6,10 +6,7 @@ import torch
 import torch.nn as nn
 import pandas as pd
 from tqdm import tqdm
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
 from typing import Dict, Union
-import gc
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -19,7 +16,7 @@ class Model:
                  net_type: str,
                  net_hyperparams: Dict[str, Union[str, int, float]],
                  optimizer: str = 'adam',
-                 loss: str = 'humber',  # SmoothL1Loss
+                 loss: str = 'metric',  # SmoothL1Loss
                  lr: float = .01,
                  ):
         self.net_type = net_type
@@ -37,8 +34,10 @@ class Model:
         # Define custom network. In each one the specific parameters must be added from self.net_params
         if self.net_type == 'ShallowNet':
             network: nn.Module = ShallowNet(dropout_prob)
-        elif self.net_type == 'SmartDense3D':
-            network: nn.Module = SmartDense3D(dropout_prob)
+        elif self.net_type == 'CustomDenseNet3D':
+            network: nn.Module = CustomDenseNet3D(dropout_prob)
+        elif self.net_type == 'CustomResNet3D':
+            network = CustomResNet3D(dropout_prob)
         else:
             raise ValueError("Bad network type. Please choose ShallowNet or ...")
 
