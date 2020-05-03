@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
-from DenseNet3D import DenseNet
+from DenseNet3D import DenseNet3D
 from tqdm import tqdm
 
 
@@ -159,13 +159,10 @@ class SmartDense3D(BaseNetwork):
         super(SmartDense3D, self).__init__()
         # The in-channel was 2 and out features 32, so a growth of 16. It's maybe too heavy for my computer,
         # So I apply a growth factor of 2 in the first layer
-        self.DenseNet3D = DenseNet(num_init_features=64,
-                         growth_rate=32,
-                         block_config=(6, 12, 24, 16)
-                                   )
+        self.DenseNet3D = DenseNet3D(num_init_features=16, growth_rate=16, block_config=(4, 4, 4, 4), drop_rate=0.2)
 
         # definiamo i layer della rete
-        self.FC1 = nn.Linear(in_features=1378+26+1024, out_features=4096)
+        self.FC1 = nn.Linear(in_features=1378+26+3294, out_features=4096)
         self.FC2 = nn.Linear(in_features=4096, out_features=512)
         # self.FC3 = nn.Linear(in_features=512, out_features=128)
         # self.FC4 = nn.Linear(in_features=1024, out_features=128)
