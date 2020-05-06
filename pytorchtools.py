@@ -10,8 +10,9 @@ class TReNDSMetrics(torch.nn.Module):
     DeepFake competition metric: log-loss
     """
 
+class TReNDSLoss(torch.nn.Module):
     def __init__(self):
-        super(TReNDSMetrics, self).__init__()
+        super().__init__()
         self.weights = torch.tensor([.3, .175, .175, .175, .175], dtype=torch.float32, device=DEVICE)
 
     def __loss(self, output, target):
