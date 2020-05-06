@@ -66,7 +66,7 @@ class DenseNet3D(nn.Module):
 
         # First three convolutions
         self.features = nn.Sequential(OrderedDict([
-            ('conv0', nn.Conv3d(1, num_init_features, kernel_size=3, stride=1, padding=1, bias=False)),
+            ('conv0', nn.Conv3d(53, num_init_features, kernel_size=3, stride=1, padding=1, bias=False)),
             ('norm0', nn.BatchNorm3d(num_init_features)),
             ('relu0', nn.ReLU(inplace=True)),
             ('conv1', nn.Conv3d(num_init_features, num_init_features, kernel_size=3, stride=1, padding=1, bias=False)),
