@@ -35,7 +35,9 @@ class TReNDS_dataset(Dataset):
         ID = self.__num_to_id[item]
         # Retrieve all information from the Dataset initialization
         # Keep brain commented until not working on 3D images
-        brain = np.array(h5File(self.mat_paths[ID], 'r', rdcc_nbytes=30*1024**2)['SM_feature'])
+        # brain = np.array(h5File(self.mat_paths[ID], 'r', rdcc_nbytes=30*1024**2)['SM_feature'])
+        # brain = np.frombuffer(zlib.decompress(open(self.mat_paths[ID], 'rb').read()), dtype='float64').reshape(53, 52, 63, 53)
+        brain: np.ndarray = np.array(h5File(self.mat_paths[ID], 'r')['SM_feature'], dtype='float32')
         # Create sample
         sample = {
             'ID': ID,
@@ -52,62 +54,97 @@ class ToTensor:
         # Define use of brain images - which are not necessary for shallow networks
         # Sum all 53 spatial maps into one to make the training lighter
         # If coming from torch tensors, they have already been summed and normalized
+        # brain = torch.tensor(sample['brain'], dtype=torch.float32)
         brain = torch.tensor(sample['brain'])
 
         return {**sample, 'brain': brain}
+
+
+class Normalize:
+    """
+    Normalize brain images with mean/std calculated with Welford's algorithm
+    """
+    def __init__(self, mean_path, std_path):
+        self.mean = torch.load(mean_path)
+        self.std = torch.load(std_path)
+        self.std[self.std == 0] = 100
+
+    def __call__(self, sample, *args, **kwargs):
+        self.mean = self.mean.cuda()
+        self.std = self.std.cuda()
+        brain = sample['brain'].cuda()
+        brain = (brain - self.mean) / self.std
+        self.mean = self.mean.cpu()
+        self.std = self.std.cpu()
+        return {**sample, 'brain': brain.cpu().float()}
+
+
+def welford(dataloader, mean, variance, i):
+    # Save brains into torch format for training set
+    for batch in tqdm(dataloader, desc='Converting train brains...'):
+        for ID, brain in zip(batch['ID'], batch['brain']):
+            brain = brain.to('cuda:0')
+            old_mean = mean.clone()
+            mean += (brain - mean) / i
+            variance += (brain - mean) * (brain - old_mean)
+            i += 1
+    return mean, variance, i
+
+
+def save(dataloader, dest_path):
+    for batch in tqdm(dataloader, desc='Converting train brains...'):
+        for ID, brain in zip(batch['ID'], batch['brain']):
+            path = os.path.join(dest_path, str(ID.item()) + '.pt')
+            torch.save(brain.clone(), path)
+            # brain = zlib.compress(brain.numpy().tobytes(), level=1)
+            # open(path, 'wb').write(brain)
 
 
 if __name__ == '__main__':
     from torch.utils.data import DataLoader
     from torchvision import transforms
 
-    # trans = transforms.Compose([transforms.ToTensor()])
+
     base_path = '..'
     train_mat_folder = os.path.join(base_path, 'dataset/Kaggle/fMRI_train')
-    train_pth_folder = os.path.join(base_path, 'dataset/fMRI_train_torch')
     test_mat_folder = os.path.join(base_path, 'dataset/Kaggle/fMRI_test')
-    test_pth_folder = os.path.join(base_path, 'dataset/fMRI_test_torch')
-    train_compressed_folder = os.path.join(base_path, 'dataset/Kaggle/fMRI_train_compressed')
-    test_compressed_folder = os.path.join(base_path, 'dataset/Kaggle/fMRI_test_compressed')
+    train_torch_folder = os.path.join(base_path, 'dataset/fMRI_train_torch')
+    test_torch_folder = os.path.join(base_path, 'dataset/fMRI_test_torch')
+
+    mean_path = os.path.join(base_path, 'dataset', 'mean.pt')
+    variance_path = os.path.join(base_path, 'dataset', 'variance.pt')
+
+    train_trans = transforms.Compose([ToTensor(), Normalize(mean_path, variance_path)])
+    test_trans = transforms.Compose([ToTensor()])
     # fnc_path = os.path.join(base_path, 'dataset/Kaggle/fnc.csv')
     # sbm_path = os.path.join(base_path, 'dataset/Kaggle/loading.csv')
     # ICN_num_path = os.path.join(base_path, 'dataset/Kaggle/ICN_numbers.csv')
     # train_scores_path = os.path.join(base_path, 'dataset/Kaggle/train_scores.csv')
     # mask_path = os.path.join(base_path, 'dataset/Kaggle/fMRI_mask.nii')
 
-    dataset = TReNDS_dataset(train_mat_folder)
-    dataloader = DataLoader(dataset, batch_size=8, shuffle=False, pin_memory=True, num_workers=6)
+    # train_set = TReNDS_dataset(train_mat_folder, transform=train_trans)
+    # train_loader = DataLoader(train_set, batch_size=32, shuffle=False, pin_memory=True, num_workers=6)
+    test_set = TReNDS_dataset(test_mat_folder, transform=test_trans)
+    test_loader = DataLoader(test_set, batch_size=32, shuffle=False, pin_memory=True, num_workers=6)
 
-    mean = torch.zeros(53, 52, 63, 53, device='cuda:0').double()
-    variance = torch.zeros_like(mean, device='cuda:0').double()
-    i = torch.zeros(1, device='cuda:0').double()
-    old_mean = torch.zeros_like(mean, device='cuda:0').double()
+    # mean = torch.zeros(53, 52, 63, 53, device='cuda:0').double()
+    # variance = torch.zeros_like(mean, device='cuda:0').double()
+    # i = 1
+
+    # mean, variance, i = welford(train_loader, mean, variance, i)
+    # mean, variance, i = welford(test_loader, mean, variance, i)
+
+    # variance = variance / (i - 1)
+    # torch.save(mean, 'mean.pt')
+    # torch.save(variance, 'variance.pt')
+
+
     # Save brains into torch format for training set
-    for batch in tqdm(dataloader, desc='Converting train brains...'):
-        for ID, brain in zip(batch['ID'], batch['brain']):
-            brain = brain.to('cuda:0')
-            old_mean = mean
-            mean += (brain - mean) / i
-            variance += (brain - mean) * (brain - old_mean)
-            i += 1
-            # path = os.path.join(train_compressed_folder, str(ID.item()) + '.gz')
-            # brain = zlib.compress(brain.numpy().tobytes(), level=1)
-            # open(path, 'wb').write(brain)
-
-    dataset = TReNDS_dataset(test_mat_folder)
-    dataloader = DataLoader(dataset, batch_size=8, shuffle=False, pin_memory=True, num_workers=6)
-
+    # save(train_loader, train_torch_folder)
+    save(test_loader, test_torch_folder)
     # Save brains into torch format for test set
-    for batch in tqdm(dataloader, desc='Converting test brains...'):
-        for ID, brain in zip(batch['ID'], batch['brain']):
-            brain = brain.to('cuda:0')
-            old_mean = mean
-            mean += (brain - mean) / i
-            variance += (brain - mean) * (brain - old_mean)
-            i += 1
-            # path = os.path.join(test_compressed_folder, str(ID.item()) + '.gz')
+    # for batch in tqdm(dataloader, desc='Converting test brains...'):
+    #     for ID, brain in zip(batch['ID'], batch['brain']):
+            # path = os.path.join(test_compressed_folder, str(ID.item()) + '.mat')
             # brain = zlib.compress(brain.numpy().tobytes(), level=1)
             # open(path, 'wb').write(brain)
-    variance = variance / (i - 1)
-    torch.save(mean, 'mean.pt')
-    torch.save(variance, 'variance.pt')
