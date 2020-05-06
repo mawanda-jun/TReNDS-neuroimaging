@@ -1,4 +1,4 @@
-from dataset import TReNDS_dataset, ToTensor
+from dataset import TReNDS_dataset, ToTensor, Normalize
 from model import Model
 
 import os
@@ -18,17 +18,20 @@ if __name__ == '__main__':
     train_scores_path = os.path.join(base_path, 'dataset/Kaggle/train_scores.csv')
     mask_path = os.path.join(base_path, 'dataset/Kaggle/fMRI_mask.nii')
 
-    run_path = 'experiments/SmartDense3D_loss.metric_batchsize.32_optimizer.adam_lr.0.0001_drop.0.3_patience.5_other_net.1'
-    checkpoint_path = os.path.join(run_path, 'checkpoint_0.16984178125858307_ep20.pt')
+    run_path = 'experiments/CustomResNet3D_loss.metric_batchsize.32_optimizer.adam_lr.1e-05_drop.0.5_patience.20_other_net.2'
+    checkpoint_path = os.path.join(run_path, 'checkpoint_0.17650213837623596_ep85.pt')
     # Define transformations for files
-    trans = transforms.Compose([ToTensor()])
+    # TODO: REMEMBER TO NORMALIZE INPUT
+    mean_path = os.path.join(base_path, 'dataset', 'mean.pt')
+    variance_path = os.path.join(base_path, 'dataset', 'variance.pt')
+    trans = transforms.Compose([ToTensor(), Normalize(mean_path, variance_path)])
 
     # Make model starting from folder submission
 
-    model = Model('SmartDense3D', {'dropout_prob': 0.3}, 'adam', 'metric', lr=1e-4)
+    model = Model('CustomResNet3D', {'dropout_prob': 0.5}, 'adam', 'metric', lr=1e-4)
     model.net.load_state_dict(torch.load(checkpoint_path)['state_dict'])
     model.net.to(DEVICE)
     # Create submission
-    pth_folder = os.path.join(base_path, 'dataset/Kaggle/fMRI_test_torch')
-    test_set = TReNDS_dataset(pth_folder, fnc_path, sbm_path, ICN_num_path, None, mask_path, trans)
+    pth_folder = os.path.join(base_path, 'dataset/fMRI_test_torch')
+    test_set = TReNDS_dataset(pth_folder, sbm_path, transform=trans)
     model.submit(DataLoader(test_set, batch_size=4, shuffle=False, pin_memory=True, num_workers=8), run_path)
