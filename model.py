@@ -1,5 +1,5 @@
-from network import ShallowNet, CustomDenseNet3D, CustomResNet3D
-from pytorchtools import EarlyStopping, TReNDSMetrics
+from network import ShallowNet, CustomDenseNet3D, CustomResNet3D50, CustomResNet3D10
+from pytorchtools import EarlyStopping, TReNDSLoss
 
 import os
 import torch
@@ -36,18 +36,20 @@ class Model:
             network: nn.Module = ShallowNet(dropout_prob)
         elif self.net_type == 'CustomDenseNet3D':
             network: nn.Module = CustomDenseNet3D(dropout_prob)
-        elif self.net_type == 'CustomResNet3D':
-            network = CustomResNet3D(dropout_prob)
+        elif self.net_type == 'CustomResNet3D50':
+            network = CustomResNet3D50(dropout_prob)
+        elif self.net_type == 'CustomResNet3D10':
+            network = CustomResNet3D10(dropout_prob)
         else:
             raise ValueError("Bad network type. Please choose ShallowNet or ...")
 
         # Define metric, loss, optimizer
-        metric_fn = TReNDSMetrics()  # Define metric function
+        metric_fn = TReNDSLoss()  # Define metric function
 
         if self.loss == 'humber':
             loss_fn = nn.SmoothL1Loss()  # Define loss function
         elif self.loss == 'metric':
-            loss_fn = TReNDSMetrics()
+            loss_fn = TReNDSLoss()
         elif self.loss == 'MAE':
             loss_fn = nn.L1Loss()
         elif self.loss == 'MSE':
@@ -75,7 +77,8 @@ class Model:
     def fit(self, epochs, train_loader, val_loader, patience, run_path=None):
         early_stopping = EarlyStopping(patience=patience, verbose=False)
 
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer_fn, len(train_loader), 1e-7)
+        cosine_annealing_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer_fn, len(train_loader), 1e-8)
+        on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer_fn, mode='min', patience=4)
 
         start_epoch = torch.cuda.Event(enable_timing=True)
         start_whole = torch.cuda.Event(enable_timing=True)
@@ -87,7 +90,7 @@ class Model:
         for epoch in range(epochs):
             start_epoch.record()
 
-            train_loss, train_metric = self.net.train_batch(self.net, train_loader, self.loss_fn, self.metric_fn, self.optimizer_fn, DEVICE)
+            train_loss, train_metric = self.net.train_batch(self.net, train_loader, self.loss_fn, self.metric_fn, self.optimizer_fn, cosine_annealing_scheduler, DEVICE)
             val_loss, val_metric = self.net.val_batch(self.net, val_loader, self.loss_fn, self.metric_fn, DEVICE)
 
             end_epoch.record()
@@ -118,8 +121,7 @@ class Model:
                 print("Early stopping")
                 break
 
-            # Update scheduler
-            scheduler.step()
+            on_plateau_scheduler.step(val_metric)
         end_whole.record()
         torch.cuda.synchronize(DEVICE)
         print("Elapsed time: {:.4f}m".format(start_whole.elapsed_time(end_whole) / 60000))
@@ -128,7 +130,6 @@ class Model:
         return early_stopping.val_metric_min
 
     def submit(self, test_loader, run_path):
-        print('Predicting test set...')
         IDs, outputs = self.net.predict_batch(self.net, test_loader, DEVICE)
         submission = pd.DataFrame(columns=['Id', 'Predicted'])
         sub_names = [
