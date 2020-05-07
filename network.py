@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 from DenseNet3D import DenseNet3D
-from ResNet import resnet50, resnet3d_10
+from ResNet import resnet50, resnet3d_10, resnet101
 from tqdm import tqdm
 
 
@@ -157,14 +157,40 @@ class ShallowNet(BaseNetwork):
                 }
 
 
-class CustomDenseNet3D(BaseNetwork):
-    def __init__(self, dropout_prob=0., *args, **kwargs):
+class BaseNetwork3D(BaseNetwork):
+    """
+    Base class to define how input is taken for 3D networks
+    """
+    def __init__(self):
+        super().__init__()
+
+    @staticmethod
+    def get_input(batch, DEVICE):
+        return {
+            # 'fnc': batch['fnc'].to(DEVICE),
+            'sbm': batch['sbm'].to(DEVICE),
+            'brain': batch['brain'].to(DEVICE)
+        }
+
+
+class BasePlainNet3D(BaseNetwork3D):
+    def __init__(self):
+        super().__init__()
+        self.net_3d = None  # Define plain network here
+
+    def forward(self, inputs, mask=None):
+        brain = inputs['brain']
+        return self.net_3d(brain)
+
+
+class CustomDenseNet3D(BaseNetwork3D):
+    def __init__(self, dropout_prob=0., num_init_features=64, *args, **kwargs):
         # inizializzazione classe base - si fa sempre
         super().__init__()
         # The in-channel was 2 and out features 32, so a growth of 16. It's maybe too heavy for my computer,
         # So I apply a growth factor of 2 in the first layer
         # out_net and fc_dim can be inherited by other networks
-        self.net_3d = DenseNet3D(num_init_features=64, growth_rate=16, block_config=(4, 4, 4, 4), drop_rate=0.2)
+        self.net_3d = DenseNet3D(num_init_features=num_init_features, growth_rate=16, block_config=(4, 4, 4, 4), drop_rate=0.2)
         self.__net_3d_out_dim = 128
         # I decided to concatenate the logits from net_3d with the logits of the resulting fc layer which has already
         # processed the sbm. Therefore, I will concatenate it on the regressor directly
@@ -193,11 +219,10 @@ class CustomDenseNet3D(BaseNetwork):
         self.__net_3d_out_dim = value
         self.FC1 = nn.Linear(in_features=26 + self.__net_3d_out_dim, out_features=2048)
 
-
     def forward(self, inputs, mask=None):
         sbm = inputs['sbm']
         brain = inputs['brain']
-        x_brain = self.net_3d(brain)
+        x_brain = F.relu(self.net_3d(brain))
         # strato 1: FC+dropout]ReLu
         x = self.FC1(torch.cat([x_brain.view(x_brain.shape[0], -1), sbm], dim=1))
         x = self.drop1(x)
@@ -219,24 +244,45 @@ class CustomDenseNet3D(BaseNetwork):
 
         return F.relu(x)
 
-    @staticmethod
-    def get_input(batch, DEVICE):
-        return {
-            # 'fnc': batch['fnc'].to(DEVICE),
-            'sbm': batch['sbm'].to(DEVICE),
-            'brain': batch['brain'].to(DEVICE)
-        }
-
 
 class CustomResNet3D10(CustomDenseNet3D):
-    def __init__(self, dropout_prob=0.):
-        super().__init__(dropout_prob)
-        self.net_3d = resnet3d_10()
+    def __init__(self, dropout_prob=0., num_init_features=64):
+        super().__init__(dropout_prob, num_init_features)
+        self.net_3d = resnet3d_10(dropout_prob=dropout_prob, num_init_features=num_init_features)
         self.net_3d_out_dim = 512
 
 
 class CustomResNet3D50(CustomDenseNet3D):
-    def __init__(self, dropout_prob=0.):
+    def __init__(self, dropout_prob=0., num_init_features=64):
         super().__init__(dropout_prob)
-        self.net_3d = resnet50()
+        self.net_3d = resnet50(dropout_prob=dropout_prob, num_init_features=num_init_features)
         self.net_3d_out_dim = 2048
+
+
+class PlainDenseNet3D(BasePlainNet3D):
+    def __init__(self, dropout_prob=0., num_init_features=64):
+        super().__init__()
+        self.net_3d = DenseNet3D(
+            num_classes=5,
+            drop_rate=dropout_prob,
+            num_init_features=num_init_features,
+            growth_rate=8
+        )
+
+
+class PlainResNet3D50(BasePlainNet3D):
+    def __init__(self, dropout_prob=0., num_init_features=64):
+        super().__init__()
+        self.net_3d = resnet50(num_class=5, dropout_prob=dropout_prob, num_init_features=num_init_features)
+
+
+class PlainResNet3D10(BasePlainNet3D):
+    def __init__(self, dropout_prob=0., num_init_features=64):
+        super().__init__()
+        self.net_3d = resnet3d_10(num_class=5, dropout_prob=dropout_prob, num_init_features=num_init_features)
+
+
+class PlainResNet3D101(BasePlainNet3D):
+    def __init__(self, dropout_prob=0., num_init_features=64):
+        super().__init__()
+        self.net_3d = resnet101(num_class=5, dropout_prob=dropout_prob, num_init_features=num_init_features)

@@ -1,7 +1,7 @@
+# From here: https://github.com/tbuikr/3D-SkipDenseSeg
 import torch
-from torch import nn
+import torch.nn as nn
 import torch.nn.functional as F
-
 from collections import OrderedDict
 
 
@@ -57,10 +57,11 @@ class DenseNet3D(nn.Module):
         bn_size (int) - multiplicative factor for number of bottle neck layers
           (i.e. bn_size * k features in the bottleneck layer)
         drop_rate (float) - dropout rate after each dense layer
+        num_classes (int) - number of classification classes
     """
 
     def __init__(self, growth_rate=16, block_config=(6, 12, 24, 16),
-                 num_init_features=32, bn_size=4, drop_rate=0):
+                 num_init_features=32, bn_size=4, drop_rate=0, num_classes=None):
 
         super(DenseNet3D, self).__init__()
 
@@ -72,7 +73,8 @@ class DenseNet3D(nn.Module):
             ('conv1', nn.Conv3d(num_init_features, num_init_features, kernel_size=3, stride=1, padding=1, bias=False)),
             ('norm1', nn.BatchNorm3d(num_init_features)),
             ('relu1', nn.ReLU(inplace=True)),
-            ('conv2', nn.Conv3d(num_init_features, num_init_features, kernel_size=3, stride=1, padding=1, bias=False)),]))
+            ('conv2', nn.Conv3d(num_init_features, num_init_features, kernel_size=3, stride=1, padding=1, bias=False)),
+        ]))
         self.features_bn = nn.Sequential(OrderedDict([
             ('norm2', nn.BatchNorm3d(num_init_features)),
             ('relu2', nn.ReLU(inplace=True)),
@@ -97,27 +99,31 @@ class DenseNet3D(nn.Module):
             # up_block = nn.ConvTranspose3d(num_features, num_classes, kernel_size=2 ** (i + 1) + 2,
             #                               stride=2 ** (i + 1),
             #                               padding=1, groups=num_classes, bias=False)
-            #
+
             # self.upsampling_blocks.append(up_block)
 
             if i != len(block_config) - 1:
+
+
                 trans = _Transition(num_input_features=num_features, num_output_features=num_features // 2)
                 self.transit_blocks.append(trans)
                 #self.features.add_module('transition%d' % (i + 1), trans)
                 num_features = num_features // 2
 
         # Final batch norm
-        # self.features.add_module('norm5', nn.BatchNorm3d(num_features))
+        #self.features.add_module('norm5', nn.BatchNorm3d(num_features))
 
         # Linear layer
-        # self.classifier = nn.Linear(num_features, num_classes)
-        # self.bn4 = nn.BatchNorm3d(num_features)
+        #self.classifier = nn.Linear(num_features, num_classes)
+        #self.bn4 = nn.BatchNorm3d(num_features)
 
 
         # ----------------------- classifier -----------------------
-        # self.bn_class = nn.BatchNorm3d(num_classes * 4  +num_init_features)
-        # self.conv_class = nn.Conv3d(num_classes * 4+num_init_features , num_classes, kernel_size=1, padding=0)
+        if num_classes is not None:
+            self.bn_class = nn.BatchNorm3d(num_features)
+            self.conv_class = nn.Conv3d(num_features, num_classes, kernel_size=3, padding=0)
         # ----------------------------------------------------------
+        self.num_classes = num_classes
 
 
         # Official init from torch repo.
@@ -152,11 +158,12 @@ class DenseNet3D(nn.Module):
         # out =  torch.cat([up_block1, up_block2, up_block3, up_block4, first_three_features], 1)
 
         # ----------------------- classifier -----------------------
-        # out = self.conv_class(F.relu(self.bn_class(out)))
+        if self.num_classes is not None:
+            out = self.bn_class(out)
+            out = F.relu(out)
+            out = self.conv_class(out)
         # ----------------------------------------------------------
-
-        # ----------------------- regressor ------------------------
-        out = F.relu(out, inplace=True)
-        out = F.adaptive_avg_pool3d(out, output_size=(1, 1, 1)).view(out.size(0), -1)
-
+        # Squeeze useless dimensions
+        out = F.relu(out.squeeze())
         return out
+

@@ -1,4 +1,4 @@
-from network import ShallowNet, CustomDenseNet3D, CustomResNet3D50, CustomResNet3D10
+from network import ShallowNet, CustomDenseNet3D, CustomResNet3D50, CustomResNet3D10, PlainResNet3D50, PlainResNet3D101, PlainDenseNet3D
 from pytorchtools import EarlyStopping, TReNDSLoss
 
 import os
@@ -15,21 +15,22 @@ class Model:
     def __init__(self,
                  net_type: str,
                  net_hyperparams: Dict[str, Union[str, int, float]],
-                 optimizer: str = 'adam',
-                 loss: str = 'metric',  # SmoothL1Loss
+                 optimizer_type: str = 'adam',
+                 loss_type: str = 'metric',  # SmoothL1Loss
                  lr: float = .01,
                  ):
         self.net_type = net_type
         self.net_hyperparams = net_hyperparams
-        self.optimizer = optimizer
-        self.loss = loss
+        self.optimizer = optimizer_type
+        self.loss = loss_type
         self.lr = lr
 
-        self.metric_fn, self.loss_fn, self.optimizer_fn, self.net = self.__build_model()
+        self.metric, self.loss, self.optimizer, self.net = self.__build_model()
 
     def __build_model(self) -> (nn.Module, nn.Module, torch.optim, nn.Module):
         # Mandatory parameters to be used.
         dropout_prob = self.net_hyperparams['dropout_prob']
+        num_init_features = self.net_hyperparams['num_init_features']
 
         # Define custom network. In each one the specific parameters must be added from self.net_params
         if self.net_type == 'ShallowNet':
@@ -40,6 +41,12 @@ class Model:
             network = CustomResNet3D50(dropout_prob)
         elif self.net_type == 'CustomResNet3D10':
             network = CustomResNet3D10(dropout_prob)
+        elif self.net_type == 'PlainDenseNet3D':
+            network = PlainDenseNet3D(dropout_prob, num_init_features=num_init_features)
+        elif self.net_type == 'PlainResNet3D50':
+            network = PlainResNet3D50(dropout_prob, num_init_features=num_init_features)
+        elif self.net_type == 'PlainResNet3D101':
+            network = PlainResNet3D101(dropout_prob, num_init_features=num_init_features)
         else:
             raise ValueError("Bad network type. Please choose ShallowNet or ...")
 
@@ -69,7 +76,8 @@ class Model:
 
     def __save(self, run_path, metric, epoch):
         state = {
-            'state_dict': self.net.state_dict()
+            'state_dict': self.net.state_dict(),
+            'optim_dict': self.optimizer.state_dict()
         }
         filepath = os.path.join(run_path, 'checkpoint_' + str(metric) + '_ep' + str(epoch) + '.pt')
         torch.save(state, filepath)
@@ -77,8 +85,8 @@ class Model:
     def fit(self, epochs, train_loader, val_loader, patience, run_path=None):
         early_stopping = EarlyStopping(patience=patience, verbose=False)
 
-        cosine_annealing_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer_fn, len(train_loader), 1e-8)
-        on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer_fn, mode='min', patience=4)
+        cosine_annealing_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, len(train_loader), 1e-8)
+        on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=4)
 
         start_epoch = torch.cuda.Event(enable_timing=True)
         start_whole = torch.cuda.Event(enable_timing=True)
@@ -90,8 +98,8 @@ class Model:
         for epoch in range(epochs):
             start_epoch.record()
 
-            train_loss, train_metric = self.net.train_batch(self.net, train_loader, self.loss_fn, self.metric_fn, self.optimizer_fn, cosine_annealing_scheduler, DEVICE)
-            val_loss, val_metric = self.net.val_batch(self.net, val_loader, self.loss_fn, self.metric_fn, DEVICE)
+            train_loss, train_metric = self.net.train_batch(self.net, train_loader, self.loss, self.metric, self.optimizer, cosine_annealing_scheduler, DEVICE)
+            val_loss, val_metric = self.net.val_batch(self.net, val_loader, self.loss, self.metric, DEVICE)
 
             end_epoch.record()
             torch.cuda.synchronize(DEVICE)

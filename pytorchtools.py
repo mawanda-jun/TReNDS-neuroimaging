@@ -5,10 +5,21 @@ import torch.nn.functional as F
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-class TReNDSMetrics(torch.nn.Module):
+class SingleAverages(torch.nn.Module):
     """
-    DeepFake competition metric: log-loss
+    Class that returns the 5 normed error percentiles
     """
+    def __init__(self):
+        super().__init__()
+
+    def __loss(self, output, target):
+        nom = torch.sum(torch.abs(output-target), dim=0)
+        denom = torch.sum(target, dim=0)
+        return nom / denom
+
+    def forward(self, output, target):
+        return self.__loss(output, target)
+
 
 class TReNDSLoss(torch.nn.Module):
     def __init__(self):
@@ -55,12 +66,18 @@ class EarlyStopping:
             self.best_score = val_score
             self.save_checkpoint = True
             self.val_metric_min = val_metric
-        elif val_score < self.best_score + self.delta or train_score > val_score + self.delta:
-            self.counter += 1
-            # print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
-            if self.counter >= self.patience:
-                self.early_stop = True
-            self.save_checkpoint = False
+        elif train_score > val_score + self.delta:  # apply patience only if train is better than val scores
+            if val_score < self.best_score + self.delta:
+                self.counter += 1
+                # print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+                if self.counter >= self.patience:
+                    self.early_stop = True
+                self.save_checkpoint = False
+            else:
+                self.best_score = val_score
+                self.save_checkpoint = True
+                self.val_metric_min = val_metric
+                self.counter = 0
         else:
             self.best_score = val_score
             self.save_checkpoint = True

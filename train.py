@@ -4,7 +4,7 @@ import shutil
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 import os
-from torchsummary import summary
+from pytorch_model_summary import summary
 
 
 def clean_folder(folder, metric, delta=0.02):
@@ -55,21 +55,23 @@ if __name__ == '__main__':
     train_set = AugmentDataset(train_set, fMRI_Aumentation())
 
     # Define training hyper parameters
-    network_type = 'CustomResNet3D50'
+    network_type = 'PlainDenseNet3D'
     optimizer = 'adam'
     loss = 'metric'
-    learning_rate = 5e-6
-    batch_size = 16
-    dropout_prob = 0.5
+    learning_rate = 1e-5
+    batch_size = 7
+    dropout_prob = 0.4
     patience = 20
+    num_init_features = 128
 
     # Define network hyper params
     net_hyperparams = {
-        'dropout_prob': dropout_prob
+        'dropout_prob': dropout_prob,
+        'num_init_features': num_init_features  # 64
     }
 
     # Define train and val loaders
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=9)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=2)
     val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=2)
 
     # Define model
@@ -86,7 +88,9 @@ if __name__ == '__main__':
                             '_lr.' + str(learning_rate) +
                             '_drop.' + str(dropout_prob) +
                             '_patience.' + str(patience) +
-                            '_other_net.' + 'resnet50')
+                            '_numInitFeatures.' + str(num_init_features) +
+                            '_other_net.' + str(0))
+
     os.makedirs(run_path, exist_ok=False)
 
     # Train model

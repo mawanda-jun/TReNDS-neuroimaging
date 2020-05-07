@@ -108,7 +108,9 @@ class ResNet3D(nn.Module):
                  block,
                  layers,
                  shortcut_type='B',
-                 # num_class = 5,
+                 num_class=None,
+                 dropout_prob=0.,
+                 first_out_channels=64,
                  no_cuda=False):
 
         self.inplanes = 64
@@ -116,7 +118,7 @@ class ResNet3D(nn.Module):
         super(ResNet3D, self).__init__()
 
         # 3D conv net
-        self.conv1 = nn.Conv3d(53, 64, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
+        self.conv1 = nn.Conv3d(53, first_out_channels, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
         # self.conv1 = nn.Conv3d(1, 64, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
         self.bn1 = nn.BatchNorm3d(64)
         self.relu = nn.ReLU(inplace=True)
@@ -130,7 +132,11 @@ class ResNet3D(nn.Module):
             block, 256*2, layers[3], shortcut_type, stride=1, dilation=4)
 
         self.fea_dim = 256*2 * block.expansion
-        # self.regressor = nn.Sequential(nn.Linear(self.fea_dim, num_class, bias=True))
+        if num_class is not None:
+            self.dropout = nn.Dropout(dropout_prob)
+            self.regressor = nn.Sequential(nn.Linear(self.fea_dim, num_class, bias=True))
+        else:
+            self.regressor = None
 
         for m in self.modules():
             if isinstance(m, nn.Conv3d):
@@ -178,8 +184,11 @@ class ResNet3D(nn.Module):
 
         x = F.adaptive_avg_pool3d(x, (1, 1, 1))
         emb_3d = x.view((-1, self.fea_dim))
-        # out = self.regressor(emb_3d)
-        out = emb_3d
+        if self.regressor is not None:
+            out = self.dropout(emb_3d)
+            out = self.regressor(out)
+        else:
+            out = emb_3d
         return out
 
 
@@ -189,11 +198,13 @@ def resnet10(**kwargs):
     model = ResNet3D(_BasicBlock, [1, 1, 1, 1], **kwargs)
     return model
 
+
 def resnet3d_10(**kwargs):
     """Constructs a ResNet-18 model.
     """
     model = ResNet3D(_BasicBlock, [1, 1, 1, 1], **kwargs)
     return model
+
 
 def resnet18(**kwargs):
     """Constructs a ResNet-18 model.
@@ -201,11 +212,13 @@ def resnet18(**kwargs):
     model = ResNet3D(_BasicBlock, [2, 2, 2, 2], **kwargs)
     return model
 
+
 def resnet34(**kwargs):
     """Constructs a ResNet-34 model.
     """
     model = ResNet3D(_BasicBlock, [3, 4, 6, 3], **kwargs)
     return model
+
 
 def resnet50(**kwargs):
     """Constructs a ResNet-50 model.
@@ -213,17 +226,20 @@ def resnet50(**kwargs):
     model = ResNet3D(_Bottleneck, [3, 4, 6, 3], **kwargs)
     return model
 
+
 def resnet101(**kwargs):
     """Constructs a ResNet-101 model.
     """
     model = ResNet3D(_Bottleneck, [3, 4, 23, 3], **kwargs)
     return model
 
+
 def resnet152(**kwargs):
     """Constructs a ResNet-101 model.
     """
     model = ResNet3D(_Bottleneck, [3, 8, 36, 3], **kwargs)
     return model
+
 
 def resnet200(**kwargs):
     """Constructs a ResNet-101 model.
