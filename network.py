@@ -76,21 +76,21 @@ class BaseNetwork(nn.Module):
         net.eval()
         conc_losses = []
         conc_metrics = []
+        with torch.no_grad():
+            for batch in tqdm(val_loader, desc='Validating...'):
+                net_input = self.get_input(batch, DEVICE)
+                labels = batch['label'].to(DEVICE)
 
-        for batch in tqdm(val_loader, desc='Validating...'):
-            net_input = self.get_input(batch, DEVICE)
-            labels = batch['label'].to(DEVICE)
-
-            # evaluate the network over the input
-            net_output = net(net_input)
-            del net_input
-            loss = loss_fn(net_output, labels)
-            metric = metric_fn(net_output, labels)
-            del net_output
-            conc_losses.append(loss.item())
-            conc_metrics.append(metric.item())
-            del loss
-            del metric
+                # evaluate the network over the input
+                net_output = net(net_input)
+                del net_input
+                loss = loss_fn(net_output, labels)
+                metric = metric_fn(net_output, labels)
+                del net_output
+                conc_losses.append(loss.item())
+                conc_metrics.append(metric.item())
+                del loss
+                del metric
 
         return torch.mean(torch.tensor(conc_losses)), torch.mean(torch.tensor(conc_metrics))
 
@@ -98,12 +98,12 @@ class BaseNetwork(nn.Module):
         net.eval()
         conc_output = []
         conc_ID = []
-
-        for batch in tqdm(test_loader, desc="Predicting test set..."):
-            net_input = self.get_input(batch, DEVICE)
-            conc_ID.extend(list(batch['ID'].detach().cpu().numpy()))
-            # evaluate the network over the input
-            conc_output.extend(list(net(net_input).detach().cpu().numpy()))
+        with torch.no_grad():
+            for batch in tqdm(test_loader, desc="Predicting test set..."):
+                net_input = self.get_input(batch, DEVICE)
+                conc_ID.extend(list(batch['ID'].detach().cpu().numpy()))
+                # evaluate the network over the input
+                conc_output.extend(list(net(net_input).detach().cpu().numpy()))
 
         return conc_ID, conc_output
 
@@ -266,7 +266,7 @@ class PlainDenseNet3D(BasePlainNet3D):
             num_classes=5,
             drop_rate=dropout_prob,
             num_init_features=num_init_features,
-            growth_rate=8
+            growth_rate=4
         )
 
 
