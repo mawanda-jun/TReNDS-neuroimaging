@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
@@ -66,18 +67,12 @@ class EarlyStopping:
             self.best_score = val_score
             self.save_checkpoint = True
             self.val_metric_min = val_metric
-        elif train_score > val_score + self.delta:  # apply patience only if train is better than val scores
-            if val_score < self.best_score + self.delta:
-                self.counter += 1
-                # print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
-                if self.counter >= self.patience:
-                    self.early_stop = True
-                self.save_checkpoint = False
-            else:
-                self.best_score = val_score
-                self.save_checkpoint = True
-                self.val_metric_min = val_metric
-                self.counter = 0
+        if val_score < self.best_score + self.delta and train_score > val_score + self.delta:  # apply patience only if train is better than val scores
+            self.counter += 1
+            # print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+            self.save_checkpoint = False
         else:
             self.best_score = val_score
             self.save_checkpoint = True
