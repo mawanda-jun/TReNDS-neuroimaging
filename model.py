@@ -1,4 +1,4 @@
-from network import ShallowNet, CustomDenseNet3D, CustomResNet3D50, CustomResNet3D10, PlainResNet3D50, PlainResNet3D101, PlainDenseNet3D
+from network import ShallowNet, CustomDenseNet3D, CustomResNet3D50, CustomResNet3D10, PlainResNet3D50, PlainResNet3D101, PlainDenseNet3D121, PlainDenseNet3D161, PlainResNet3D10, PlainDenseNet3DCustom
 from pytorchtools import EarlyStopping, TReNDSLoss
 
 import os
@@ -18,14 +18,18 @@ class Model:
                  optimizer_type: str = 'adam',
                  loss_type: str = 'metric',  # SmoothL1Loss
                  lr: float = .01,
+                 lr_decay = .95
                  ):
         self.net_type = net_type
         self.net_hyperparams = net_hyperparams
         self.optimizer = optimizer_type
         self.loss = loss_type
         self.lr = lr
+        self.lr_decay = lr_decay
 
         self.metric, self.loss, self.optimizer, self.net = self.__build_model()
+
+        self.net.to(DEVICE)
 
     def __build_model(self) -> (nn.Module, nn.Module, torch.optim, nn.Module):
         # Mandatory parameters to be used.
@@ -41,8 +45,14 @@ class Model:
             network = CustomResNet3D50(dropout_prob)
         elif self.net_type == 'CustomResNet3D10':
             network = CustomResNet3D10(dropout_prob)
-        elif self.net_type == 'PlainDenseNet3D':
-            network = PlainDenseNet3D(dropout_prob, num_init_features=num_init_features)
+        elif self.net_type == 'PlainDenseNet3DCustom':
+            network = PlainDenseNet3DCustom(dropout_prob, num_init_features=num_init_features)
+        elif self.net_type == 'PlainDenseNet3D121':
+            network = PlainDenseNet3D121(dropout_prob, num_init_features=num_init_features)
+        elif self.net_type == 'PlainDenseNet3D161':
+            network = PlainDenseNet3D161(dropout_prob, num_init_features=num_init_features)
+        elif self.net_type == 'PlainResNet3D10':
+            network = PlainResNet3D10(dropout_prob, num_init_features=num_init_features)
         elif self.net_type == 'PlainResNet3D50':
             network = PlainResNet3D50(dropout_prob, num_init_features=num_init_features)
         elif self.net_type == 'PlainResNet3D101':
@@ -66,9 +76,9 @@ class Model:
 
         if self.optimizer == 'adam':
             # Define the optimizer. It wants to know which parameters are being optimized.
-            optimizer_fn = torch.optim.Adam(params=network.parameters(), lr=self.lr, weight_decay=1e-5)
+            optimizer_fn = torch.optim.Adam(params=network.parameters(), lr=self.lr, weight_decay=1e-2)
         elif self.optimizer == 'SGD':
-            optimizer_fn = torch.optim.SGD(params=network.parameters(), lr=self.lr, momentum=0.3, weight_decay=1e-7)
+            optimizer_fn = torch.optim.SGD(params=network.parameters(), lr=self.lr, momentum=0.9, weight_decay=1e-7, nesterov=True)
         else:
             raise ValueError('Bad optimizer type. Please choose adam or ...')
 
@@ -77,7 +87,7 @@ class Model:
     def __save(self, run_path, metric, epoch):
         state = {
             'state_dict': self.net.state_dict(),
-            'optim_dict': self.optimizer.state_dict()
+            'optim_state': self.optimizer.state_dict()
         }
         filepath = os.path.join(run_path, 'checkpoint_' + str(metric) + '_ep' + str(epoch) + '.pt')
         torch.save(state, filepath)
@@ -87,6 +97,7 @@ class Model:
 
         cosine_annealing_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, len(train_loader), 1e-8)
         on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=4)
+        decreasing_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.lr_decay)
 
         start_epoch = torch.cuda.Event(enable_timing=True)
         start_whole = torch.cuda.Event(enable_timing=True)
@@ -109,14 +120,15 @@ class Model:
             elapsed_minutes = elapsed_seconds // 60
             elapsed_seconds = round(elapsed_seconds % 60)
             print(
-                "\nEpoch: {}\ttrain metric: {:.4f} loss: {:.4f}\t\tval metric: {:.4f} loss: {:.4}\ttime: {:.0f}m{:.0f}s".format(
+                "\nEpoch: {}\ttrain metric: {:.4f} loss: {:.4f}\t\tval metric: {:.4f} loss: {:.4}\ttime: {:.0f}m{:.0f}s\t lr: {}".format(
                     epoch+1,
                     train_metric,
                     train_loss,
                     val_metric,
                     val_loss,
                     elapsed_minutes,
-                    elapsed_seconds
+                    elapsed_seconds,
+                    decreasing_lr_scheduler.get_last_lr()[0]
                 ))
             # Update early stopping. This is really useful to stop training in time.
             # The if statement is not slowing down training since each epoch last very long.
@@ -130,6 +142,7 @@ class Model:
                 break
 
             on_plateau_scheduler.step(val_metric)
+            decreasing_lr_scheduler.step()
         end_whole.record()
         torch.cuda.synchronize(DEVICE)
         print("Elapsed time: {:.4f}m".format(start_whole.elapsed_time(end_whole) / 60000))

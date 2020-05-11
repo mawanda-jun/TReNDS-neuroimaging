@@ -107,31 +107,35 @@ class ResNet3D(nn.Module):
     def __init__(self,
                  block,
                  layers,
-                 shortcut_type='B',
+                 shortcut_type='A',
                  num_class=None,
                  dropout_prob=0.,
-                 first_out_channels=64,
+                 num_init_features=64,
                  no_cuda=False):
 
-        self.inplanes = 64
+        self.inplanes = num_init_features
         self.no_cuda = no_cuda
         super(ResNet3D, self).__init__()
 
         # 3D conv net
-        self.conv1 = nn.Conv3d(53, first_out_channels, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
-        # self.conv1 = nn.Conv3d(1, 64, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
-        self.bn1 = nn.BatchNorm3d(64)
+        self.conv1 = nn.Conv3d(53, num_init_features, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
+        num_features = num_init_features  # copy original num_features (64)
+        self.bn1 = nn.BatchNorm3d(num_features)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool3d(kernel_size=(3, 3, 3), stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0], shortcut_type)
+        self.layer1 = self._make_layer(block, num_features, layers[0], shortcut_type)
+        num_features *= 2  # expand num features (128)
         self.layer2 = self._make_layer(
-            block, 64*2, layers[1], shortcut_type, stride=2)
+            block, num_features, layers[1], shortcut_type, stride=2)
+        num_features *= 2  # expand num features (256)
         self.layer3 = self._make_layer(
-            block, 128*2, layers[2], shortcut_type, stride=1, dilation=2)
+            block, num_features, layers[2], shortcut_type, stride=1, dilation=2)
+        num_features *= 2  # expand num features (512)
         self.layer4 = self._make_layer(
-            block, 256*2, layers[3], shortcut_type, stride=1, dilation=4)
+            block, num_features, layers[3], shortcut_type, stride=1, dilation=4)
 
-        self.fea_dim = 256*2 * block.expansion
+        self.fea_dim = num_features * block.expansion
+
         if num_class is not None:
             self.dropout = nn.Dropout(dropout_prob)
             self.regressor = nn.Sequential(nn.Linear(self.fea_dim, num_class, bias=True))

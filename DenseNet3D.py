@@ -32,6 +32,9 @@ class _DenseBlock(nn.Sequential):
             layer = _DenseLayer(num_input_features + i * growth_rate, growth_rate, bn_size, drop_rate)
             self.add_module('denselayer%d' % (i + 1), layer)
 
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return super().forward(input)
+
 
 class _Transition(nn.Sequential):
     def __init__(self, num_input_features, num_output_features):
@@ -44,6 +47,9 @@ class _Transition(nn.Sequential):
         self.add_module('pool_norm', nn.BatchNorm3d(num_output_features))
         self.add_module('pool_relu', nn.ReLU(inplace=True))
         self.add_module('pool', nn.Conv3d(num_output_features, num_output_features, kernel_size=2, stride=2))
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        return super().forward(input)
 
 
 class DenseNet3D(nn.Module):
@@ -167,3 +173,52 @@ class DenseNet3D(nn.Module):
         out = F.relu(out.squeeze())
         return out
 
+
+def densenet_custom(dropout_prob, num_init_features, **kwargs):
+    return DenseNet3D(
+            drop_rate=dropout_prob,
+            num_init_features=num_init_features,  # (64)
+            growth_rate=1,
+            block_config=(1, 1, 1, 1),
+            **kwargs
+        )
+
+
+def densenet121(dropout_prob, num_init_features, **kwargs):
+    return DenseNet3D(
+            drop_rate=dropout_prob,
+            num_init_features=num_init_features,  # (64)
+            growth_rate=32,
+            block_config=(6, 12, 24, 16),
+            **kwargs
+        )
+
+
+def densenet161(dropout_prob, num_init_features, **kwargs):
+    return DenseNet3D(
+            drop_rate=dropout_prob,
+            num_init_features=num_init_features,  # (96)
+            growth_rate=48,
+            block_config=(6, 12, 36, 24),
+            **kwargs
+        )
+
+
+def densenet169(dropout_prob, num_init_features, **kwargs):
+    return DenseNet3D(
+            drop_rate=dropout_prob,
+            num_init_features=num_init_features,  # (64)
+            growth_rate=32,
+            block_config=(6, 12, 32, 32),
+            **kwargs
+        )
+
+
+def densenet201(dropout_prob, num_init_features, **kwargs):
+    return DenseNet3D(
+            drop_rate=dropout_prob,
+            num_init_features=num_init_features,  # (64)
+            growth_rate=32,
+            block_config=(6, 12, 48, 32),
+            **kwargs
+        )

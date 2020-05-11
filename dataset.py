@@ -7,7 +7,7 @@ import nibabel as nib
 import zlib
 from torch.utils.data import Dataset
 import torch
-from monai.transforms import RandAffine
+from monai.transforms import RandAffine, RandGaussianNoise, RandShiftIntensity, RandSpatialCrop, Resize, RandFlip
 
 
 class TReNDS_dataset(Dataset):
@@ -71,24 +71,21 @@ class TReNDS_dataset(Dataset):
         # Get the ID corresponding to the item (an index) that torch is looking for.
         ID = self.__num_to_id[item]
 
-        # Retrieve all information from the Dataset initialization
-        # Keep brain commented until not working on 3D images
-        brain = torch.load(self.pt_paths[ID])
-        # brain = np.copy(np.frombuffer(zlib.decompress(open(self.pt_paths[ID], 'rb').read()), dtype='float64').reshape(53, 52, 63, 53))
-        # brain = None
+        # Logic to put items in new sample - since not every item is read during training:
+        # ID: 1
+        # sbm: 2
+        # brain: 3
+        # fnc: 4 - it may be not read during training
+        # label: bottom - during test there is no label to be read
+        sample = ID, self.sbm[ID], torch.load(self.pt_paths[ID]).numpy()
 
-        sbm = self.sbm[ID]
-        # Create sample
-        sample = {
-            'ID': ID,
-            'sbm': sbm,
-            'brain': brain
-        }
+        # Add fnc if needed
         if self.fnc:
-            sample['fnc'] = self.fnc[ID]
+            sample = *sample, self.fnc[ID]
+
         # Add labels to the sample if the dataset is the training one.
         if self.labels:
-            sample['label'] = self.labels[ID]
+            sample = *sample, self.labels[ID]
 
         # Transform sample (if defined)
         return self.transform(sample) if self.transform is not None else sample
@@ -96,22 +93,28 @@ class TReNDS_dataset(Dataset):
 
 # Custom transform example
 class ToTensor:
+    def __init__(self, use_fnc=False, train=True):
+        self.use_fnc = use_fnc
+        self.train = train
+
     def __call__(self, sample):
-        sbm = torch.tensor(sample['sbm']).float()
-        ID = sample['ID']
+        # ID = sample[0]
+        # sbm = sample[1]
+        # brain = sample[2]
+        # fnc = sample[3]
+        # labels = sample[-1]
+        new_sample = sample[0], torch.tensor(sample[1], dtype=torch.float32)
 
-        new_sample = {'sbm': sbm, 'ID': ID}
-
-        if sample['brain'] is not None:
+        brain = sample[2]
+        if brain is not None:
             # Define use of brain images - which are not necessary for shallow networks
             # Brain is a cpu tensor already, so no need for transformations
-            new_sample['brain'] = sample['brain']
-        # Define list of keys in sample to avoid the use of try/except which is quite computational costy
-        sample_keys = list(sample.keys())
-        tries_keys = ['fnc', 'label']
-        for tk in tries_keys:
-            if tk in sample_keys:
-                new_sample[tk] = torch.tensor(sample[tk]).float()
+            new_sample = *new_sample, torch.tensor(brain, dtype=torch.float32)
+
+        if self.use_fnc:
+            new_sample = *new_sample, torch.tensor(sample[3], dtype=torch.float32)
+        if self.train:  # Add label
+            new_sample = *new_sample, torch.tensor(sample[-1], dtype=torch.float32)
 
         return new_sample
 
@@ -126,29 +129,44 @@ class Normalize:
         self.std[self.std == 0] = 100
 
     def __call__(self, sample, *args, **kwargs):
-        brain = sample['brain']
+        brain = sample[2]
         brain = (brain - self.mean) / self.std
+        brain = brain / 50.
         # Mean and variance are in float64 precision, so we need to cast `brain` to float32 again.
-        return {**sample, 'brain': brain.float()}
+        sample = *sample[0:2], brain, *sample[3:]
+        return sample
 
 
 class fMRI_Aumentation:
     def __init__(self):
         self.rand_affine = RandAffine(
-            mode='nearest',
+            mode='bilinear',
             prob=0.5,
             spatial_size=(52, 63, 53),
             translate_range=(5, 5, 5),
-            rotate_range=(np.pi*4, np.pi*4, np.pi*4),
-            scale_range=(0.15, 0.15, 0.15),
+            # rotate_range=(np.pi*4, np.pi*4, np.pi*4),
+            scale_range=(0.5, 0.5, 0.5),
             padding_mode='border',
+            as_tensor_output=False
             # device=torch.device('cuda:0')
         )
+        # self.gaussian_noise = RandGaussianNoise(prob=.5)
+        # self.rand_shift_intensity = RandShiftIntensity(1., prob=0.5)
+        # self.rand_flip = RandFlip(spatial_axis=(0, 1, 2), prob=0.5)  # The axis is 0, 1, 2 are without colors channel
+        # self.crop = RandSpatialCrop(roi_size=(35, 35, 35), random_center=True, random_size=True)
+        # self.resize = Resize((52, 63, 53), mode='wrap')
 
     def __call__(self, sample, *args, **kwargs):
-        brain: np.ndarray = sample['brain']  #.to('cuda:0)
+        brain: np.ndarray = sample[2]
+        # brain = self.gaussian_noise(brain)
+        # brain = self.rand_flip(brain)
+        # brain = self.rand_shift_intensity(brain)
         brain = self.rand_affine(brain, (52, 63, 53))
-        return {**sample, 'brain': brain}  #.cpu()
+        # brain = self.crop(brain)
+        # brain = self.gaussian_noise(brain)
+        # brain = self.resize(brain)
+        sample = *sample[0:2], brain, *sample[3:]
+        return sample
 
 
 class AugmentDataset(Dataset):
