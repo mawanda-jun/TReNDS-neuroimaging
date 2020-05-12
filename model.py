@@ -77,6 +77,9 @@ class Model:
         if self.optimizer == 'adam':
             # Define the optimizer. It wants to know which parameters are being optimized.
             optimizer_fn = torch.optim.Adam(params=network.parameters(), lr=self.lr, weight_decay=1e-2)
+        elif self.optimizer == 'adamw':
+            # Define the optimizer. It wants to know which parameters are being optimized.
+            optimizer_fn = torch.optim.AdamW(params=network.parameters(), lr=self.lr)
         elif self.optimizer == 'SGD':
             optimizer_fn = torch.optim.SGD(params=network.parameters(), lr=self.lr, momentum=0.9, weight_decay=1e-7, nesterov=True)
         else:
@@ -95,9 +98,10 @@ class Model:
     def fit(self, epochs, train_loader, val_loader, patience, run_path=None):
         early_stopping = EarlyStopping(patience=patience, verbose=False)
 
-        cosine_annealing_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, len(train_loader), 1e-8)
-        on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=4)
-        decreasing_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.lr_decay)
+        # cosine_annealing_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, len(train_loader), 1e-8)
+        # on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=4)
+        # decreasing_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.lr_decay)
+        cyclic_lr_scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=1e-3, max_lr=9e-3, step_size_up=len(train_loader) // 2, cycle_momentum=False, gamma=self.lr_decay)
 
         start_epoch = torch.cuda.Event(enable_timing=True)
         start_whole = torch.cuda.Event(enable_timing=True)
@@ -109,7 +113,7 @@ class Model:
         for epoch in range(epochs):
             start_epoch.record()
 
-            train_loss, train_metric = self.net.train_batch(self.net, train_loader, self.loss, self.metric, self.optimizer, cosine_annealing_scheduler, DEVICE)
+            train_loss, train_metric = self.net.train_batch(self.net, train_loader, self.loss, self.metric, self.optimizer, cyclic_lr_scheduler, DEVICE)
             val_loss, val_metric = self.net.val_batch(self.net, val_loader, self.loss, self.metric, DEVICE)
 
             end_epoch.record()
@@ -120,7 +124,7 @@ class Model:
             elapsed_minutes = elapsed_seconds // 60
             elapsed_seconds = round(elapsed_seconds % 60)
             print(
-                "\nEpoch: {}\ttrain metric: {:.4f} loss: {:.4f}\t\tval metric: {:.4f} loss: {:.4}\ttime: {:.0f}m{:.0f}s\t lr: {}".format(
+                "\nEpoch: {}\ttrain metric: {:.4f} loss: {:.4f}\t\tval metric: {:.4f} loss: {:.4}\ttime: {:.0f}m{:.0f}s\t lr: {:.2e}".format(
                     epoch+1,
                     train_metric,
                     train_loss,
@@ -128,7 +132,7 @@ class Model:
                     val_loss,
                     elapsed_minutes,
                     elapsed_seconds,
-                    decreasing_lr_scheduler.get_last_lr()[0]
+                    cyclic_lr_scheduler.get_last_lr()[0]
                 ))
             # Update early stopping. This is really useful to stop training in time.
             # The if statement is not slowing down training since each epoch last very long.
@@ -141,8 +145,8 @@ class Model:
                 print("Early stopping")
                 break
 
-            on_plateau_scheduler.step(val_metric)
-            decreasing_lr_scheduler.step()
+            # on_plateau_scheduler.step(val_metric)
+            # decreasing_lr_scheduler.step()
         end_whole.record()
         torch.cuda.synchronize(DEVICE)
         print("Elapsed time: {:.4f}m".format(start_whole.elapsed_time(end_whole) / 60000))
