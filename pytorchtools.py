@@ -1,25 +1,8 @@
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-
-class SingleAverages(torch.nn.Module):
-    """
-    Class that returns the 5 normed error percentiles
-    """
-    def __init__(self):
-        super().__init__()
-
-    def __loss(self, output, target):
-        nom = torch.sum(torch.abs(output-target), dim=0)
-        denom = torch.sum(target, dim=0)
-        return nom / denom
-
-    def forward(self, output, target):
-        return self.__loss(output, target)
 
 
 class TReNDSLoss(torch.nn.Module):
