@@ -100,7 +100,7 @@ class BaseNetwork(nn.Module):
         with torch.no_grad():
             for batch in tqdm(test_loader, desc="Predicting test set..."):
                 net_input = self.get_input(batch, DEVICE)
-                conc_ID.extend(list(batch['ID'].detach().cpu().numpy()))
+                conc_ID.extend(list(batch[0].detach().cpu().numpy()))
                 # evaluate the network over the input
                 conc_output.extend(list(net(net_input).detach().cpu().numpy()))
 
