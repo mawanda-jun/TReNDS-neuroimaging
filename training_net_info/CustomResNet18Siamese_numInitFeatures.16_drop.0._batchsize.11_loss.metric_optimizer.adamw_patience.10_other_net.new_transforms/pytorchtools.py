@@ -5,6 +5,20 @@ import torch
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
+class SingleAccuracies(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        # self.weights = torch.tensor([.3, .175, .175, .175, .175], dtype=torch.float32, device=DEVICE)
+
+    def __metric(self, output, target):
+        nom = torch.sum(torch.abs(output-target), dim=0)
+        denom = torch.sum(target, dim=0)
+        return nom / denom
+
+    def forward(self, output: torch.Tensor, target: torch.Tensor, **kwargs):
+        return (1. - self.__metric(output, target)) * 100
+
+
 class TReNDSLoss(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -15,7 +29,7 @@ class TReNDSLoss(torch.nn.Module):
         denom = torch.sum(target, dim=0)
         return torch.sum(self.weights * nom / denom)
 
-    def forward(self, output: torch.Tensor, target: torch.Tensor, **kwargs):
+    def forward(self, output: torch.Tensor, target: torch.Tensor):
         return self.__loss(output, target)
 
 

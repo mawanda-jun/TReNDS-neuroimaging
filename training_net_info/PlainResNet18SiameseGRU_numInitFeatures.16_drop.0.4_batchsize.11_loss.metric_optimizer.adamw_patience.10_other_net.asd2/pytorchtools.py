@@ -5,18 +5,32 @@ import torch
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
-class TReNDSLoss(torch.nn.Module):
+class TReNDSMetric(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.weights = torch.tensor([.3, .175, .175, .175, .175], dtype=torch.float32, device=DEVICE)
 
-    def __loss(self, output, target):
+    def _loss(self, output, target):
         nom = torch.sum(torch.abs(output-target), dim=0)
         denom = torch.sum(target, dim=0)
-        return torch.sum(self.weights * nom / denom)
+        return nom / denom
+
+    def forward(self, output: torch.Tensor, target: torch.Tensor):
+        return torch.sum(self.weights * self._loss(output, target))
+
+
+class SingleAccuracies(TReNDSMetric):
+    def __init__(self):
+        super().__init__()
 
     def forward(self, output: torch.Tensor, target: torch.Tensor, **kwargs):
-        return self.__loss(output, target)
+        return (1. - self._loss(output, target)) * 100
+
+
+class TReNDSLoss(TReNDSMetric):
+    def __init__(self):
+        super().__init__()
+        self.weights = torch.tensor([.4, .17, .17, .17, .19], dtype=torch.float32, device=DEVICE)
 
 
 class EarlyStopping:

@@ -93,10 +93,9 @@ class TReNDS_dataset(Dataset):
 
 # Custom transform example
 class ToTensor:
-    def __init__(self, use_fnc=False, train=True, lr_range=False):
+    def __init__(self, use_fnc=False, train=True):
         self.use_fnc = use_fnc
         self.train = train
-        self.lr_range = lr_range
 
     def __call__(self, sample):
         # ID = sample[0]
@@ -117,10 +116,8 @@ class ToTensor:
         if self.train:  # Add label
             new_sample = *new_sample, torch.tensor(sample[-1], dtype=torch.float32)
 
-        if self.lr_range:
-            return [(new_sample[1], new_sample[2], new_sample[3]), new_sample[-1]]
-        else:
-            return new_sample
+        # return new_sample
+        return [(new_sample[1], new_sample[2]), new_sample[-1]]
 
 
 class Normalize:
@@ -143,18 +140,18 @@ class Normalize:
 class fMRI_Aumentation:
     def __init__(self):
         self.rand_affine = RandAffine(
-            mode='nearest',
+            mode='bilinear',
             prob=0.5,
             spatial_size=(52, 63, 53),
             translate_range=(5, 5, 5),
-            rotate_range=(np.pi*4, np.pi*4, np.pi*4),
+            # rotate_range=(np.pi*4, np.pi*4, np.pi*4),
             # scale_range=(0.15, 0.15, 0.15),
-            padding_mode='zeros',
+            # padding_mode='zeros',
             as_tensor_output=False
         )
         # self.gaussian_noise = RandGaussianNoise(prob=.5)
         # self.rand_shift_intensity = RandShiftIntensity(1., prob=0.5)
-        self.rand_scale_intensity = RandScaleIntensity(.3, prob=0.5)
+        self.rand_scale_intensity = RandScaleIntensity([-1, 2.], prob=0.5)
         # self.rand_flip = RandFlip(spatial_axis=(0, 1, 2), prob=0.5)  # The axis is 0, 1, 2 are without colors channel
         # self.crop = RandSpatialCrop(roi_size=(35, 35, 35), random_center=True, random_size=True)
         # self.resize = Resize((52, 63, 53), mode='wrap')
@@ -162,7 +159,6 @@ class fMRI_Aumentation:
     def __call__(self, sample, *args, **kwargs):
         brain: np.ndarray = sample[2]
         brain = self.rand_affine(brain, (52, 63, 53))
-        brain = self.rand_scale_intensity(brain)
         sample = *sample[0:2], brain, *sample[3:]
         return sample
 

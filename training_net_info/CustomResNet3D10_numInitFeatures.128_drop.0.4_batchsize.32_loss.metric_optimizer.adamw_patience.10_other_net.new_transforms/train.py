@@ -5,8 +5,8 @@ from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 import os
 
-# from torch_lr_finder import LRFinder
-# import json
+from torch_lr_finder import LRFinder
+import json
 
 
 def clean_folder(folder, metric, delta=0.02):
@@ -17,9 +17,9 @@ def clean_folder(folder, metric, delta=0.02):
     """
     for file in os.listdir(folder):
         if 'checkpoint' in file:
-            filename = file.split('.')[0] + '.' + file.split('.')[1]
-            metric_value = filename.split('_')[1]
-            metric_value = float(metric_value)
+            filename = file.split('.')[0] + '.' + file.split('.')[1]  # Keep name and floating value
+            metric_value = filename.split('_')[3]  # Select float value
+            metric_value = float(metric_value)  # Cast string to float
             if not metric - delta < metric_value < metric + delta:
                 os.remove(os.path.join(folder, file))
 
@@ -57,11 +57,11 @@ if __name__ == '__main__':
     val_set = AugmentDataset(val_set, val_trans)
 
     # Define training hyper parameters
-    network_type = 'PlainResNet3D10'
+    network_type = 'CustomResNet3D10'
     optimizer = 'adamw'
     loss = 'metric'
-    learning_rate = 1e-6
-    learning_rate_decay = .98
+    learning_rate = 6e-3
+    learning_rate_decay = 1.
     batch_size = 32
     dropout_prob = 0.4
     patience = 10
@@ -74,7 +74,7 @@ if __name__ == '__main__':
     }
 
     # Define train and val loaders
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=6)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=12)
     val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=4)
 
     # Define model
@@ -99,7 +99,7 @@ if __name__ == '__main__':
                             '_loss.' + loss +
                             '_optimizer.' + optimizer +
                             '_patience.' + str(patience) +
-                            '_other_net.' + 'normalized')
+                            '_other_net.' + 'new_transforms')
 
     os.makedirs(run_path, exist_ok=False)
 

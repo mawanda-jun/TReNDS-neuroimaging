@@ -111,7 +111,6 @@ class ResNet3D(nn.Module):
                  num_class=None,
                  dropout_prob=0.,
                  num_init_features=64,
-                 in_channels=53,
                  no_cuda=False):
 
         self.inplanes = num_init_features
@@ -119,7 +118,7 @@ class ResNet3D(nn.Module):
         super(ResNet3D, self).__init__()
 
         # 3D conv net
-        self.conv1 = nn.Conv3d(in_channels, num_init_features, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
+        self.conv1 = nn.Conv3d(53, num_init_features, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
         num_features = num_init_features  # copy original num_features (64)
         self.bn1 = nn.BatchNorm3d(num_features)
         self.relu = nn.ReLU(inplace=True)

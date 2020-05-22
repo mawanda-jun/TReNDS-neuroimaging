@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from _collections import OrderedDict
 
 from base_networks import BaseNetwork, BaseCustomNet3D, BasePlainNet3D
-from ResNet import resnet50, resnet3d_10, resnet101, resnet34, resnet18
+from ResNet import resnet50, resnet3d_10, resnet101, resnet34
 from DenseNet3D import densenet121, densenet_custom, densenet161
 
 
@@ -139,70 +139,6 @@ class CustomResNet3D10(BaseCustomNet3D):
         return torch.cat([x_sbm, x_brain], dim=1)
 
 
-class CustomResNet18Siamese(BaseCustomNet3D):
-    """
-    In this network I try to understand age from the sbm alone, and let the network extract the other information
-    directly from the brain images.
-    """
-    def __init__(self, dropout_prob=0., num_init_features=16):
-        super().__init__()
-        num_brain_features = 8
-        self.dropout_prob = dropout_prob
-        self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features, num_class=num_brain_features)
-        self.sbm_fnc_features = nn.Sequential(OrderedDict([
-            ('FC1', nn.Linear(26+1378, 2048, bias=False)),
-            ('relu1', nn.ReLU(inplace=True)),
-            ('FC2', nn.Linear(2048, 512, bias=False))
-        ]))
-        self.regressor = nn.Linear(num_brain_features*53 + 512, 5, bias=True)
-
-    def forward(self, inputs, mask=None):
-        # Extract sbm, brains and fnc
-        sbm, brains, fnc = inputs
-        # Go with siamese network, one for each brain's color channel
-        x_brain = torch.cat([F.relu(self.net_3d(brain.unsqueeze(1))) for brain in brains.transpose(1, 0)], dim=1)
-        # Calculate features for fnc and sbm features
-        x_sbm_fnc = F.relu(self.sbm_fnc_features(torch.cat([sbm, fnc], dim=1)))
-        # Do dropout on both the outputs
-        x_brain = F.dropout(x_brain, self.dropout_prob, self.training)
-        x_sbm_fnc = F.dropout(x_sbm_fnc, self.dropout_prob, self.training)
-        # Concat everything and feed the regressor
-        x = F.relu(self.regressor(torch.cat([x_sbm_fnc, x_brain], dim=1)))
-        return x
-
-
-class CustomResNet18SiameseMashup(BaseCustomNet3D):
-    """
-    In this network I try to understand age from the sbm alone, and let the network extract the other information
-    directly from the brain images.
-    """
-    def __init__(self, dropout_prob=0., num_init_features=16):
-        super().__init__()
-        num_brain_features = 8
-        self.dropout_prob = dropout_prob
-        self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features, num_class=num_brain_features)
-        self.sbm_fnc_features = nn.Linear(26+1378, 2048, bias=False)
-        self.FC_mashup = nn.Linear(2048 + num_brain_features*53, 512, bias=True)
-        self.regressor = nn.Linear(512, 5, bias=True)
-
-    def forward(self, inputs, mask=None):
-        # Extract sbm, brains and fnc
-        sbm, brains, fnc = inputs
-        # Go with siamese network, one for each brain's color channel
-        x_brain = torch.cat([F.relu(self.net_3d(brain.unsqueeze(1))) for brain in brains.transpose(1, 0)], dim=1)
-        # Calculate features for fnc and sbm features
-        x_sbm_fnc = F.relu(self.sbm_fnc_features(torch.cat([sbm, fnc], dim=1)))
-        # Do dropout on both the outputs
-        x_brain = F.dropout(x_brain, self.dropout_prob, self.training)
-        x_sbm_fnc = F.dropout(x_sbm_fnc, self.dropout_prob, self.training)
-        # Concat everything and feed the mashup
-        x = F.relu(self.FC_mashup(torch.cat([x_sbm_fnc, x_brain], dim=1)))
-        # Apply dropout
-        x = F.dropout(x, self.dropout_prob, self.training)
-        x = F.relu(self.regressor(x))
-        return x
-
-
 class CustomResNet3D50(CustomDenseNet3D):
     def __init__(self, dropout_prob=0., num_init_features=64):
         super().__init__(dropout_prob)
@@ -244,46 +180,6 @@ class PlainResNet3D10(BasePlainNet3D):
     def __init__(self, dropout_prob=0., num_init_features=64):
         super().__init__()
         self.net_3d = resnet3d_10(num_class=5, dropout_prob=dropout_prob, num_init_features=num_init_features)
-
-
-class PlainResNet18Siamese(BaseCustomNet3D):
-    def __init__(self, dropout_prob=0., num_init_features=64):
-        super().__init__()
-        num_brain_features = 8
-        self.dropout_prob = dropout_prob
-        self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features, num_class=num_brain_features)
-        self.regressor = nn.Linear(num_brain_features*53, 5, bias=True)
-
-    def forward(self, inputs, mask=None):
-        # Extract sbm, brains and fnc
-        _, brains, _ = inputs
-        # Go with siamese network, one for each brain's color channel
-        x_brain = torch.cat([F.relu(self.net_3d(brain.unsqueeze(1)), inplace=True) for brain in brains.transpose(1, 0)], dim=1)
-        x_brain = F.dropout(x_brain, self.dropout_prob, self.training)
-        return F.relu(self.regressor(x_brain), inplace=True)
-
-
-class PlainResNet18SiameseGRU(BaseCustomNet3D):
-    def __init__(self, dropout_prob=0., num_init_features=64):
-        super().__init__()
-        num_brain_features = 128  # num brain features extracted by net_3d
-        hidden_size = 512
-        num_layers = 2
-        self.dropout_prob = dropout_prob
-        self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features)
-        self.rnn = nn.GRU(input_size=num_brain_features, hidden_size=hidden_size, num_layers=num_layers, dropout=dropout_prob, bidirectional=True)
-        self.regressor = nn.Linear(hidden_size*num_layers, 5, bias=True)
-
-    def forward(self, inputs, mask=None):
-        # Extract sbm, brains and fnc
-        _, brains, _ = inputs
-        # Go with siamese network, one for each brain's color channel
-        x_brain = torch.stack([F.relu(self.net_3d(brain.unsqueeze(1)), inplace=True) for brain in brains.transpose(1, 0)], dim=0)
-        del brains, inputs
-        rnn_output = self.rnn(F.dropout(x_brain, self.dropout_prob, self.training))[0][-1]  # We are only interested in output and in the information of the last step
-        rnn_output = F.dropout(rnn_output, self.dropout_prob, self.training)
-        rnn_output = F.relu(rnn_output, inplace=True)
-        return F.relu(self.regressor(rnn_output))
 
 
 class PlainResNet3D34(BasePlainNet3D):

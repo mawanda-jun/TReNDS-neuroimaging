@@ -18,7 +18,7 @@ class BaseNetwork(nn.Module):
     def get_input(batch, DEVICE):
         pass
 
-    def train_batch(self, net, train_loader, loss_fn, metric_fn, accuracies_fn, optimizer, scheduler, DEVICE) -> (torch.Tensor, torch.Tensor):
+    def train_batch(self, net, train_loader, loss_fn, metric_fn, optimizer, scheduler, DEVICE) -> (torch.Tensor, torch.Tensor):
         """
         Define training method only once. The only method that must be done is how the training gets the training inputs
         :param net:
@@ -34,7 +34,6 @@ class BaseNetwork(nn.Module):
         net.train()
         conc_losses = []
         conc_metrics = []
-        conc_accuracies = []
         for batch in tqdm(train_loader, desc='Training...'):
             net_input = self.get_input(batch, DEVICE)
 
@@ -48,7 +47,6 @@ class BaseNetwork(nn.Module):
             # update networks
             loss = loss_fn(net_output, labels)
             metric = metric_fn(net_output, labels)
-            accuracies = accuracies_fn(net_output, labels)
 
             del net_output
 
@@ -62,26 +60,25 @@ class BaseNetwork(nn.Module):
             optimizer.step()
 
             conc_losses.append(loss.item())
-            conc_metrics.append(metric.item())
-            conc_accuracies.append(accuracies)
+            # conc_metrics.append(metric.item())
+            conc_metrics.append(metric)
 
             del loss
-            del metric
+            # del metric
 
             # Update scheduler
             scheduler.step()
 
-        stacked_accuracies = torch.stack(conc_accuracies, dim=0).detach().cpu()
-        del conc_accuracies
+        stacked_metrics = torch.stack(conc_metrics, dim=0).detach().cpu()
+        del conc_metrics
 
-        return torch.mean(torch.tensor(conc_losses)), torch.mean(torch.tensor(conc_metrics)), torch.mean(stacked_accuracies, dim=0).numpy()
+        return torch.mean(torch.tensor(conc_losses)), torch.mean(stacked_metrics, dim=0).numpy()
 
-    def val_batch(self, net, val_loader, loss_fn, metric_fn, accuracies_fn, DEVICE) -> (torch.Tensor, torch.Tensor):
+    def val_batch(self, net, val_loader, loss_fn, metric_fn, DEVICE) -> (torch.Tensor, torch.Tensor):
         net.to(DEVICE)
         net.eval()
         conc_losses = []
         conc_metrics = []
-        conc_accuracies = []
         with torch.no_grad():
             for batch in tqdm(val_loader, desc='Validating...'):
                 net_input = self.get_input(batch, DEVICE)
@@ -92,18 +89,17 @@ class BaseNetwork(nn.Module):
                 del net_input
                 loss = loss_fn(net_output, labels)
                 metric = metric_fn(net_output, labels)
-                accuracies = accuracies_fn(net_output, labels)
                 del net_output
                 conc_losses.append(loss.item())
-                conc_metrics.append(metric.item())
-                conc_accuracies.append(accuracies)
+                # conc_metrics.append(metric.item())
+                conc_metrics.append(metric)
                 del loss
-                del metric
+                # del metric
 
-        stacked_accuracies = torch.stack(conc_accuracies, dim=0).detach().cpu()
-        del conc_accuracies
+            stacked_metrics = torch.stack(conc_metrics, dim=0).detach().cpu()
+            del conc_metrics
 
-        return torch.mean(torch.tensor(conc_losses)), torch.mean(torch.tensor(conc_metrics)), torch.mean(stacked_accuracies, dim=0).numpy()
+        return torch.mean(torch.tensor(conc_losses)), torch.mean(stacked_metrics, dim=0).numpy()
 
     def predict_batch(self, net, test_loader, DEVICE):
         net.eval()
@@ -128,8 +124,8 @@ class BaseCustomNet3D(BaseNetwork):
 
     @staticmethod
     def get_input(batch, DEVICE):
-        # return sbm, brain, fnc
-        return batch[1].to(DEVICE), batch[2].to(DEVICE), batch[3].to(DEVICE)
+        # return sbm, brain
+        return batch[1].to(DEVICE), batch[2].to(DEVICE)
 
 
 class BasePlainNet3D(BaseNetwork):

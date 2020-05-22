@@ -1,17 +1,5 @@
-from network import \
-    ShallowNet, \
-    CustomResNet18Siamese, \
-    CustomResNet18SiameseMashup, \
-    CustomResNet3D10, \
-    PlainResNet3D50, \
-    PlainResNet3D101, \
-    PlainDenseNet3D121, \
-    PlainDenseNet3D161, \
-    PlainResNet3D10, \
-    PlainDenseNet3DCustom, \
-    PlainResNet18Siamese, \
-    PlainResNet18SiameseGRU
-from pytorchtools import EarlyStopping, TReNDSLoss, TReNDSMetric, SingleAccuracies
+from network import ShallowNet, CustomDenseNet3D, CustomResNet3D50, CustomResNet3D10, PlainResNet3D50, PlainResNet3D101, PlainDenseNet3D121, PlainDenseNet3D161, PlainResNet3D10, PlainDenseNet3DCustom
+from pytorchtools import EarlyStopping, TReNDSLoss, SingleAccuracies
 
 import os
 import torch
@@ -39,13 +27,7 @@ class Model:
         self.lr = lr
         self.lr_decay = lr_decay
 
-        self.loss, self.optimizer, self.net = self.__build_model()
-
-        # Define metric, loss, optimizer
-        self.metric = TReNDSMetric()  # Define metric function
-        self.accuracies = SingleAccuracies()  # Define single percentage function
-        self.metric.requires_grad = False  # Disable grad for function since useless
-        self.accuracies.require_grad = False
+        self.metric, self.loss, self.optimizer, self.net = self.__build_model()
 
         self.net.to(DEVICE)
 
@@ -61,14 +43,6 @@ class Model:
         #     network: nn.Module = CustomDenseNet3D(dropout_prob)
         elif self.net_type == 'CustomResNet3D10':
             network = CustomResNet3D10(dropout_prob, num_init_features)
-        elif self.net_type == 'CustomResNet18Siamese':
-            network = CustomResNet18Siamese(dropout_prob, num_init_features)
-        elif self.net_type == 'CustomResNet18SiameseMashup':
-            network = CustomResNet18SiameseMashup(dropout_prob, num_init_features)
-        elif self.net_type == 'PlainResNet18Siamese':
-            network = PlainResNet18Siamese(dropout_prob, num_init_features)
-        elif self.net_type == 'PlainResNet18SiameseGRU':
-            network = PlainResNet18SiameseGRU(dropout_prob, num_init_features)
         # elif self.net_type == 'CustomResNet3D50':
         #     network = CustomResNet3D50(dropout_prob)
         elif self.net_type == 'PlainDenseNet3DCustom':
@@ -86,7 +60,10 @@ class Model:
         else:
             raise ValueError("Bad network type. Please choose ShallowNet or ...")
 
-        # Define loss
+        # Define metric, loss, optimizer
+        metric_fn = SingleAccuracies()  # Define metric function
+        metric_fn.requires_grad = False  # Disable grad for function since useless
+
         if self.loss == 'humber':
             loss_fn = nn.SmoothL1Loss()  # Define loss function
         elif self.loss == 'metric':
@@ -109,7 +86,7 @@ class Model:
         else:
             raise ValueError('Bad optimizer type. Please choose adam or ...')
 
-        return loss_fn, optimizer_fn, network
+        return metric_fn, loss_fn, optimizer_fn, network
 
     def __save(self, run_path, metric, epoch):
         state = {
@@ -124,9 +101,9 @@ class Model:
         early_stopping = EarlyStopping(patience=patience, verbose=False)
 
         # cosine_annealing_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, len(train_loader), 1e-8)
-        on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=3, factor=0.5)
+        on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=4)
         # decreasing_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.lr_decay)
-        cyclic_lr_scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=1e-4, max_lr=1e-2, step_size_up=len(train_loader), cycle_momentum=False, gamma=self.lr_decay)
+        cyclic_lr_scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=7e-5, max_lr=2e-3, step_size_up=len(train_loader) // 2, cycle_momentum=False, gamma=self.lr_decay)
 
         start_epoch = torch.cuda.Event(enable_timing=True)
         start_whole = torch.cuda.Event(enable_timing=True)
@@ -140,8 +117,8 @@ class Model:
         for epoch in range(epochs):
             start_epoch.record()
 
-            train_loss, train_metric, train_accuracies = self.net.train_batch(self.net, train_loader, self.loss, self.metric, self.accuracies, self.optimizer, cyclic_lr_scheduler, DEVICE)
-            val_loss, val_metric, val_accuracies = self.net.val_batch(self.net, val_loader, self.loss, self.metric, self.accuracies, DEVICE)
+            train_loss, train_metric = self.net.train_batch(self.net, train_loader, self.loss, self.metric, self.optimizer, cyclic_lr_scheduler, DEVICE)
+            val_loss, val_metric = self.net.val_batch(self.net, val_loader, self.loss, self.metric, DEVICE)
 
             end_epoch.record()
             torch.cuda.synchronize(DEVICE)
@@ -151,17 +128,16 @@ class Model:
             elapsed_minutes = elapsed_seconds // 60
             elapsed_seconds = round(elapsed_seconds % 60)
             space = "\n{}".format(''.join(["----" for _ in range(9)]))
-            text = "\nEPOCH: {}\t\tElapsed_time: {:.0f}m{:.0f}s".format(epoch, elapsed_minutes, elapsed_seconds)
+            text = "\nEPOCH: {}\t\tElapsed_time: {:.0f}m{:.0f}s".format(epoch + 1, elapsed_minutes, elapsed_seconds)
             text += "\n\t\t\t\tTrain\t\tValidation"
             text += "\nLoss:\t\t\t{:.4f}\t\t{:.4f}".format(train_loss, val_loss)
-            text += "\nMetric:\t\t\t{:.4f}\t\t{:.4f}".format(train_metric, val_metric)
             text += space
-            text += "\nSingle performance"
-            text += "\nage:\t\t\t{:.2f}%\t\t{:.2f}%".format(train_accuracies[0], val_accuracies[0])
-            text += "\ndomain1_var1:\t{:.2f}%\t\t{:.2f}%".format(train_accuracies[1], val_accuracies[1])
-            text += "\ndomain1_var2:\t{:.2f}%\t\t{:.2f}%".format(train_accuracies[1], val_accuracies[1])
-            text += "\ndomain2_var1:\t{:.2f}%\t\t{:.2f}%".format(train_accuracies[2], val_accuracies[2])
-            text += "\ndomain2_var2:\t{:.2f}%\t\t{:.2f}%".format(train_accuracies[3], val_accuracies[3])
+            text += "\nACCURACY"
+            text += "\nage:\t\t\t{:.2f}%\t\t{:.2f}%".format(train_metric[0], val_metric[0])
+            text += "\ndomain1_var1:\t{:.2f}%\t\t{:.2f}%".format(train_metric[1], val_metric[1])
+            text += "\ndomain1_var2:\t{:.2f}%\t\t{:.2f}%".format(train_metric[1], val_metric[1])
+            text += "\ndomain2_var1:\t{:.2f}%\t\t{:.2f}%".format(train_metric[2], val_metric[2])
+            text += "\ndomain2_var2:\t{:.2f}%\t\t{:.2f}%".format(train_metric[3], val_metric[3])
             text += space
             text += "\nLearning rate:\t{:.2e}".format(cyclic_lr_scheduler.get_last_lr()[0])
             text += space
@@ -169,18 +145,29 @@ class Model:
 
             print(text)
             whole_text += text
-
+            # print(
+            #     "\nEpoch: {}\ttrain metric: {:.4f} loss: {:.4f}\t\tval metric: {:.4f} loss: {:.4}\ttime: {:.0f}m{:.0f}s\t lr: {:.2e}".format(
+            #         epoch+1,
+            #         train_metric,
+            #         train_loss,
+            #         val_metric,
+            #         val_loss,
+            #         elapsed_minutes,
+            #         elapsed_seconds,
+            #         cyclic_lr_scheduler.get_last_lr()[0]
+            #     ))
+            # Update early stopping. This is really useful to stop training in time.
             # The if statement is not slowing down training since each epoch last very long.
-            epoch_val_metric = val_metric.item()
-            epoch_train_metric = train_metric.item()
-            early_stopping(epoch_train_metric, epoch_val_metric, self.net)
+            epoch_val_loss = val_loss.item()
+            epoch_train_loss = train_loss.item()
+            early_stopping(epoch_train_loss, epoch_val_loss, self.net)
             if early_stopping.save_checkpoint and run_path:
-                self.__save(run_path, epoch_val_metric, epoch)
+                self.__save(run_path, epoch_val_loss, epoch)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
 
-            on_plateau_scheduler.step(val_metric)
+            on_plateau_scheduler.step(val_loss)
             # decreasing_lr_scheduler.step()
 
             # Save history to file

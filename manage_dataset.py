@@ -37,7 +37,8 @@ class TReNDS_dataset(Dataset):
         # Keep brain commented until not working on 3D images
         # brain = np.array(h5File(self.mat_paths[ID], 'r', rdcc_nbytes=30*1024**2)['SM_feature'])
         # brain = np.frombuffer(zlib.decompress(open(self.mat_paths[ID], 'rb').read()), dtype='float64').reshape(53, 52, 63, 53)
-        brain: np.ndarray = np.array(h5File(self.mat_paths[ID], 'r')['SM_feature'], dtype='float32')
+        # brain: np.ndarray = np.array(h5File(self.mat_paths[ID], 'r')['SM_feature'], dtype='float32')
+        brain = torch.load(self.mat_paths[ID]).numpy()
         # Create sample
         sample = {
             'ID': ID,
@@ -56,8 +57,9 @@ class ToTensor:
         # If coming from torch tensors, they have already been summed and normalized
         # brain = torch.tensor(sample['brain'], dtype=torch.float32)
         brain = torch.tensor(sample['brain'])
+        brain = brain / 50.
 
-        return {**sample, 'brain': brain}
+        return {**sample, 'brain': brain.float()}
 
 
 class Normalize:
@@ -106,15 +108,15 @@ if __name__ == '__main__':
 
 
     base_path = '..'
-    train_mat_folder = os.path.join(base_path, 'dataset/Kaggle/fMRI_train')
-    test_mat_folder = os.path.join(base_path, 'dataset/Kaggle/fMRI_test')
-    train_torch_folder = os.path.join(base_path, 'dataset/fMRI_train_torch')
-    test_torch_folder = os.path.join(base_path, 'dataset/fMRI_test_torch')
+    train_mat_folder = os.path.join(base_path, 'dataset/fMRI_train_torch')
+    # test_mat_folder = os.path.join(base_path, 'dataset/Kaggle/fMRI_test')
+    train_norm_folder = os.path.join(base_path, 'dataset/fMRI_train_norm')
+    # test_torch_folder = os.path.join(base_path, 'dataset/fMRI_test_torch')
 
-    mean_path = os.path.join(base_path, 'dataset', 'mean.pt')
-    variance_path = os.path.join(base_path, 'dataset', 'variance.pt')
+    # mean_path = os.path.join(base_path, 'dataset', 'mean.pt')
+    # variance_path = os.path.join(base_path, 'dataset', 'variance.pt')
 
-    train_trans = transforms.Compose([ToTensor(), Normalize(mean_path, variance_path)])
+    # train_trans = transforms.Compose([ToTensor(), Normalize(mean_path, variance_path)])
     test_trans = transforms.Compose([ToTensor()])
     # fnc_path = os.path.join(base_path, 'dataset/Kaggle/fnc.csv')
     # sbm_path = os.path.join(base_path, 'dataset/Kaggle/loading.csv')
@@ -122,10 +124,10 @@ if __name__ == '__main__':
     # train_scores_path = os.path.join(base_path, 'dataset/Kaggle/train_scores.csv')
     # mask_path = os.path.join(base_path, 'dataset/Kaggle/fMRI_mask.nii')
 
-    # train_set = TReNDS_dataset(train_mat_folder, transform=train_trans)
-    # train_loader = DataLoader(train_set, batch_size=32, shuffle=False, pin_memory=True, num_workers=6)
-    test_set = TReNDS_dataset(test_mat_folder, transform=test_trans)
-    test_loader = DataLoader(test_set, batch_size=32, shuffle=False, pin_memory=True, num_workers=6)
+    train_set = TReNDS_dataset(train_mat_folder, transform=test_trans)
+    train_loader = DataLoader(train_set, batch_size=16, shuffle=False, pin_memory=True, num_workers=12)
+    # test_set = TReNDS_dataset(test_mat_folder, transform=test_trans)
+    # test_loader = DataLoader(test_set, batch_size=32, shuffle=False, pin_memory=True, num_workers=6)
 
     # mean = torch.zeros(53, 52, 63, 53, device='cuda:0').double()
     # variance = torch.zeros_like(mean, device='cuda:0').double()
@@ -141,7 +143,7 @@ if __name__ == '__main__':
 
     # Save brains into torch format for training set
     # save(train_loader, train_torch_folder)
-    save(test_loader, test_torch_folder)
+    save(train_loader, train_norm_folder)
     # Save brains into torch format for test set
     # for batch in tqdm(dataloader, desc='Converting test brains...'):
     #     for ID, brain in zip(batch['ID'], batch['brain']):

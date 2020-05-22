@@ -1,9 +1,11 @@
 from model import Model
-from dataset import TReNDS_dataset, ToTensor, AugmentDataset, fMRI_Aumentation, Normalize
+from dataset import TReNDS_dataset, ToTensor, AugmentDataset, fMRI_Aumentation
 import shutil
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 import os
+from torch_lr_finder import LRFinder
+import json
 
 
 def clean_folder(folder, metric, delta=0.02):
@@ -32,27 +34,24 @@ if __name__ == '__main__':
     # mask_path = os.path.join(base_path, 'dataset/Kaggle/fMRI_mask.nii')
 
     # No need to normalize train set since it has already been normalized while transformed
-    mean_path = os.path.join(base_path, 'dataset', 'mean.pt')
-    variance_path = os.path.join(base_path, 'dataset', 'variance.pt')
+    # mean_path = os.path.join(base_path, 'dataset', 'mean.pt')
+    # variance_path = os.path.join(base_path, 'dataset', 'variance.pt')
 
     # Define training hyper parameters
-    network_type = 'PlainResNet18SiameseGRU'
+    network_type = 'CustomResNet18SiameseMashup'
     optimizer = 'adamw'
     loss = 'metric'
-    learning_rate = 1e-6
-    learning_rate_decay = .98
+    learning_rate = 3e-3
+    learning_rate_decay = .995
     batch_size = 11
     dropout_prob = 0.4
     patience = 10
     num_init_features = 16
 
     # Define training settings
+    lr_range_test = False
     train_workers = 12
     val_workers = 4
-    lr_range_test = False
-    if lr_range_test:
-        train_workers = 0
-    use_fnc = False
 
     # Define network hyper params
     net_hyperparams = {
@@ -61,7 +60,7 @@ if __name__ == '__main__':
     }
 
     # Create dataset
-    dataset = TReNDS_dataset(train_torch_folder, sbm_path, train_scores_path=train_scores_path)
+    dataset = TReNDS_dataset(train_torch_folder, sbm_path, fnc_path=fnc_path, train_scores_path=train_scores_path)
 
     # Split dataset in train/val
     val_dim = 0.3
@@ -72,9 +71,9 @@ if __name__ == '__main__':
     train_set, val_set = random_split(dataset, [train_len, val_len])
 
     # Define transformations
-    train_trans = transforms.Compose([fMRI_Aumentation(), ToTensor(use_fnc=use_fnc, train=True, lr_range=lr_range_test), Normalize(mean_path, variance_path)])
+    train_trans = transforms.Compose([fMRI_Aumentation(), ToTensor(use_fnc=True, train=True, lr_range=lr_range_test)])
     # train_trans = transforms.Compose([ToTensor(use_fnc=True, train=True)])
-    val_trans = transforms.Compose([ToTensor(use_fnc=use_fnc, train=True, lr_range=lr_range_test), Normalize(mean_path, variance_path)])
+    val_trans = ToTensor(use_fnc=True, train=True, lr_range=lr_range_test)
 
     train_set = AugmentDataset(train_set, train_trans)
     val_set = AugmentDataset(val_set, val_trans)
@@ -87,8 +86,6 @@ if __name__ == '__main__':
     model = Model(network_type, net_hyperparams, optimizer, loss, lr=learning_rate, lr_decay=learning_rate_decay)
 
     if lr_range_test:
-        from torch_lr_finder import LRFinder
-        import json
         network = model.net
         criterion = model.loss
         optimizer = model.optimizer
@@ -109,7 +106,7 @@ if __name__ == '__main__':
                                 '_loss.' + loss +
                                 '_optimizer.' + optimizer +
                                 '_patience.' + str(patience) +
-                                '_other_net.' + '32outputfeatures')
+                                '_other_net.' + 'new_transforms')
 
         os.makedirs(run_path, exist_ok=False)
 

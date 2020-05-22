@@ -18,8 +18,8 @@ if __name__ == '__main__':
     train_scores_path = os.path.join(base_path, 'dataset/Kaggle/train_scores.csv')
     mask_path = os.path.join(base_path, 'dataset/Kaggle/fMRI_mask.nii')
 
-    run_path = 'experiments/PlainResNet3D10_loss.metric_batchsize.100_optimizer.adam_lr.0.001_drop.0.5_patience.10_numInitFeatures.64_other_net.normalized'
-    checkpoint_path = os.path.join(run_path, 'checkpoint_0.17024557292461395_ep18.pt')
+    run_path = 'experiments/PlainResNet3D10_numInitFeatures.128_lr.0.004_lr_decay.0.98_drop.0.4_batchsize.32_loss.metric_optimizer.adamw_patience.10_other_net.normalized'
+    checkpoint_path = os.path.join(run_path, 'checkpoint_0.17056873440742493_ep13.pt')
     # Define transformations for files
     # TODO: REMEMBER TO NORMALIZE INPUT
     mean_path = os.path.join(base_path, 'dataset', 'mean.pt')
@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     # Make model starting from folder submission
 
-    model = Model('PlainResNet3D10', {'dropout_prob': 0.5, 'num_init_features': 64}, 'adam', 'metric', lr=1e-4)
+    model = Model('PlainResNet3D10', {'dropout_prob': 0.5, 'num_init_features': 128}, 'adamw', 'metric', lr=1e-4)
     model.net.load_state_dict(torch.load(checkpoint_path)['state_dict'])
     model.net.to(DEVICE)
     # Create submission

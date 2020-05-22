@@ -116,8 +116,8 @@ class ToTensor:
         if self.train:  # Add label
             new_sample = *new_sample, torch.tensor(sample[-1], dtype=torch.float32)
 
-        return new_sample
-        # return new_sample[2], new_sample[-1]
+        # return new_sample
+        return new_sample[2], new_sample[-1]
 
 
 class Normalize:
@@ -126,14 +126,14 @@ class Normalize:
     """
     def __init__(self, mean_path, std_path):
         self.mean = torch.load(mean_path)
-        self.std = torch.load(std_path) * 50.  # TODO: make attention to this number. I used 50 to normalize the training set.
+        self.std = torch.load(std_path)
         self.std[self.std == 0] = 100
 
     def __call__(self, sample, *args, **kwargs):
         brain = sample[2]
         brain = (brain - self.mean) / self.std
         # Mean and variance are in float64 precision, so we need to cast `brain` to float32 again.
-        sample = *sample[0:2], brain, *sample[3:]
+        sample = *sample[0:2], brain.float(), *sample[3:]
         return sample
 
 
@@ -144,11 +144,10 @@ class fMRI_Aumentation:
             prob=0.5,
             spatial_size=(52, 63, 53),
             translate_range=(5, 5, 5),
-            # rotate_range=(np.pi*4, np.pi*4, np.pi*4),
-            scale_range=(0.5, 0.5, 0.5),
-            padding_mode='border',
+            rotate_range=(np.pi*4, np.pi*4, np.pi*4),
+            scale_range=(0.15, 0.15, 0.15),
+            padding_mode='zeros',
             as_tensor_output=False
-            # device=torch.device('cuda:0')
         )
         # self.gaussian_noise = RandGaussianNoise(prob=.5)
         # self.rand_shift_intensity = RandShiftIntensity(1., prob=0.5)
@@ -158,13 +157,7 @@ class fMRI_Aumentation:
 
     def __call__(self, sample, *args, **kwargs):
         brain: np.ndarray = sample[2]
-        # brain = self.gaussian_noise(brain)
-        # brain = self.rand_flip(brain)
-        # brain = self.rand_shift_intensity(brain)
         brain = self.rand_affine(brain, (52, 63, 53))
-        # brain = self.crop(brain)
-        # brain = self.gaussian_noise(brain)
-        # brain = self.resize(brain)
         sample = *sample[0:2], brain, *sample[3:]
         return sample
 

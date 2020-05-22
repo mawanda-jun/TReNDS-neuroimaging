@@ -266,11 +266,11 @@ class PlainResNet18Siamese(BaseCustomNet3D):
 class PlainResNet18SiameseGRU(BaseCustomNet3D):
     def __init__(self, dropout_prob=0., num_init_features=64):
         super().__init__()
-        num_brain_features = 128  # num brain features extracted by net_3d
-        hidden_size = 512
+        num_brain_features = 8
+        hidden_size = 256
         num_layers = 2
         self.dropout_prob = dropout_prob
-        self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features)
+        self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features, num_class=num_brain_features)
         self.rnn = nn.GRU(input_size=num_brain_features, hidden_size=hidden_size, num_layers=num_layers, dropout=dropout_prob, bidirectional=True)
         self.regressor = nn.Linear(hidden_size*num_layers, 5, bias=True)
 
@@ -279,11 +279,9 @@ class PlainResNet18SiameseGRU(BaseCustomNet3D):
         _, brains, _ = inputs
         # Go with siamese network, one for each brain's color channel
         x_brain = torch.stack([F.relu(self.net_3d(brain.unsqueeze(1)), inplace=True) for brain in brains.transpose(1, 0)], dim=0)
-        del brains, inputs
-        rnn_output = self.rnn(F.dropout(x_brain, self.dropout_prob, self.training))[0][-1]  # We are only interested in output and in the information of the last step
+        rnn_output = self.rnn(x_brain)[0][-1]  # We are only interested in output and in the information of the last step
         rnn_output = F.dropout(rnn_output, self.dropout_prob, self.training)
-        rnn_output = F.relu(rnn_output, inplace=True)
-        return F.relu(self.regressor(rnn_output))
+        return F.relu(self.regressor(rnn_output), inplace=True)
 
 
 class PlainResNet3D34(BasePlainNet3D):
