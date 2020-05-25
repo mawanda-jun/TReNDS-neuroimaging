@@ -306,34 +306,6 @@ class PlainResNet3D101(BasePlainNet3D):
 
 
 class VAERegularized(BasePlainNet3D):
-    def __init__(self, dropout_prob, num_init_features, **kwargs):
+    def __init__(self, **kwargs):
         super(VAERegularized, self).__init__()
-        self.net_3d = BrainClassifierVAE(in_channels=53, input_side_dim=48, model_depth=num_init_features, num_classes=5)
-
-
-class VAERegularizedSiamese(BasePlainNet3D):
-    def __init__(self, dropout_prob, num_init_features, **kwargs):
-        super(VAERegularizedSiamese, self).__init__()
-        features = 8
-        self.net_3d = BrainClassifierVAE(in_channels=1, input_side_dim=48, model_depth=num_init_features, num_classes=features)
-        self.regressor = nn.Linear(8*53, 5)
-
-    def forward(self, inputs, mask=None):
-        out_f = []
-        recon_img = []
-        input_img = []
-        z_m = []
-        z_v = []
-        for img in inputs.transpose(1, 0):
-            out_features, reconstructed_image, input_image, z_mean, z_var = self.net_3d(img.unsqueeze(1))
-            out_f.append(out_features)
-            recon_img.append(reconstructed_image)
-            input_img.append(input_image),
-            z_m.append(z_mean)
-            z_v.append(z_var)
-        out_f = torch.cat(out_f, dim=1)
-        recon_img = torch.cat(recon_img, dim=0)
-        input_img = torch.cat(input_img, dim=0)
-        z_m = torch.cat(z_m, dim=0)
-        z_v = torch.cat(z_v, dim=0)
-        return self.regressor(F.relu(out_f.view(out_f.shape[0], -1), inplace=True)), recon_img, input_img, z_m, z_v
+        self.net_3d = BrainClassifierVAE(input_shape=(53, 48, 48, 48), num_features=5)

@@ -11,8 +11,7 @@ from network import \
     PlainDenseNet3DCustom, \
     PlainResNet18Siamese, \
     PlainResNet18SiameseGRU, \
-    VAERegularized, \
-    VAERegularizedSiamese
+    VAERegularized
 
 from pytorchtools import EarlyStopping, TReNDSLoss, TReNDSMetric, SingleAccuracies, TReNDSLossVAE
 
@@ -33,7 +32,7 @@ class Model:
                  optimizer_type: str = 'adam',
                  loss_type: str = 'metric',  # SmoothL1Loss
                  lr: float = .01,
-                 lr_decay=.95
+                 lr_decay = .95
                  ):
         self.net_type = net_type
         self.net_hyperparams = net_hyperparams
@@ -87,9 +86,7 @@ class Model:
         elif self.net_type == 'PlainResNet3D101':
             network = PlainResNet3D101(dropout_prob, num_init_features=num_init_features)
         elif self.net_type == 'VAERegularized':
-            network = VAERegularized(dropout_prob, num_init_features)
-        elif self.net_type == 'VAERegularizedSiamese':
-            network = VAERegularizedSiamese(dropout_prob, num_init_features)
+            network = VAERegularized()
         else:
             raise ValueError("Bad network type. Please choose ShallowNet or ...")
 
@@ -114,8 +111,7 @@ class Model:
             # Define the optimizer. It wants to know which parameters are being optimized.
             optimizer_fn = torch.optim.AdamW(params=network.parameters(), lr=self.lr, weight_decay=1e-5)
         elif self.optimizer == 'SGD':
-            optimizer_fn = torch.optim.SGD(params=network.parameters(), lr=self.lr, momentum=0.9, weight_decay=1e-7,
-                                           nesterov=True)
+            optimizer_fn = torch.optim.SGD(params=network.parameters(), lr=self.lr, momentum=0.9, weight_decay=1e-7, nesterov=True)
         else:
             raise ValueError('Bad optimizer type. Please choose adam or ...')
 
@@ -134,12 +130,9 @@ class Model:
         early_stopping = EarlyStopping(patience=patience, verbose=False)
 
         # cosine_annealing_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, len(train_loader), 1e-8)
-        on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=3,
-                                                                          factor=0.5)
+        on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=3, factor=0.5)
         # decreasing_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.lr_decay)
-        cyclic_lr_scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=1e-4, max_lr=7e-4,
-                                                                step_size_up=len(train_loader), cycle_momentum=False,
-                                                                gamma=self.lr_decay)
+        cyclic_lr_scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=1e-5, max_lr=8e-4, step_size_up=len(train_loader), cycle_momentum=False, gamma=self.lr_decay)
 
         start_epoch = torch.cuda.Event(enable_timing=True)
         start_whole = torch.cuda.Event(enable_timing=True)
@@ -153,18 +146,14 @@ class Model:
         for epoch in range(epochs):
             start_epoch.record()
 
-            train_loss, train_metric, train_accuracies = self.net.train_batch(self.net, train_loader, self.loss,
-                                                                              self.metric, self.accuracies,
-                                                                              self.optimizer, cyclic_lr_scheduler,
-                                                                              DEVICE)
-            val_loss, val_metric, val_accuracies = self.net.val_batch(self.net, val_loader, self.loss, self.metric,
-                                                                      self.accuracies, DEVICE)
+            train_loss, train_metric, train_accuracies = self.net.train_batch(self.net, train_loader, self.loss, self.metric, self.accuracies, self.optimizer, cyclic_lr_scheduler, DEVICE)
+            val_loss, val_metric, val_accuracies = self.net.val_batch(self.net, val_loader, self.loss, self.metric, self.accuracies, DEVICE)
 
             end_epoch.record()
             torch.cuda.synchronize(DEVICE)
             # Calculate elapsed time
             elapsed_seconds = start_epoch.elapsed_time(
-                end_epoch) / 1000
+                        end_epoch) / 1000
             elapsed_minutes = elapsed_seconds // 60
             elapsed_seconds = round(elapsed_seconds % 60)
             space = "\n{}".format(''.join(["----" for _ in range(9)]))
@@ -188,8 +177,8 @@ class Model:
             whole_text += text
 
             # The if statement is not slowing down training since each epoch last very long.
-            epoch_val_metric = val_metric
-            epoch_train_metric = train_metric
+            epoch_val_metric = val_metric.item()
+            epoch_train_metric = train_metric.item()
             early_stopping(epoch_train_metric, epoch_val_metric, self.net)
             if early_stopping.save_checkpoint and run_path:
                 self.__save(run_path, epoch_val_metric, epoch)
@@ -220,8 +209,7 @@ class Model:
             '_domain2_var2'
         ]
 
-        for ID, output in tqdm(zip(IDs, outputs), desc='Writing predictions on submission.csv file...',
-                               total=len(outputs)):
+        for ID, output in tqdm(zip(IDs, outputs), desc='Writing predictions on submission.csv file...', total=len(outputs)):
             sub_names_part = [str(int(ID)) + sn for sn in sub_names]
             for name, out in zip(sub_names_part, output):
                 submission.loc[len(submission['Id'])] = [name, out]

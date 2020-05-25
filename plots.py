@@ -3,8 +3,8 @@ import json
 
 if __name__ == '__main__':
     history = json.load(open('lr_finder.json'))
-    lrs = history['lr'][40:]
-    losses = history['loss'][40:]
+    lrs = history['lr'][:-5]
+    losses = history['loss'][:-5]
     fig = plt.figure()
     ax = fig.add_subplot()
     ax.plot(lrs, losses)

@@ -1,7 +1,6 @@
 import torch.nn as nn
 import torch
 from tqdm import tqdm
-import numpy as np
 
 
 class BaseNetwork(nn.Module):
@@ -33,9 +32,9 @@ class BaseNetwork(nn.Module):
         """
         net.to(DEVICE)
         net.train()
-        running_loss = 0
-        running_metric = 0
-        running_acc = np.zeros(5)
+        conc_losses = []
+        conc_metrics = []
+        conc_accuracies = []
         for batch in tqdm(train_loader, desc='Training...'):
             net_input = self.get_input(batch, DEVICE)
 
@@ -48,8 +47,8 @@ class BaseNetwork(nn.Module):
 
             # update networks
             loss = loss_fn(net_output, labels)
-            metric = metric_fn(net_output[0], labels)
-            accuracies = accuracies_fn(net_output[0], labels)
+            metric = metric_fn(net_output[0:2], labels)
+            accuracies = accuracies_fn(net_output[0:2], labels)
 
             del net_output
 
@@ -62,9 +61,9 @@ class BaseNetwork(nn.Module):
             # update optimizer
             optimizer.step()
 
-            running_loss += loss.item()
-            running_metric += metric.item()
-            running_acc += accuracies.detach().cpu().numpy()
+            conc_losses.append(loss.item())
+            conc_metrics.append(metric.item())
+            conc_accuracies.append(accuracies)
 
             del loss
             del metric
@@ -72,14 +71,17 @@ class BaseNetwork(nn.Module):
             # Update scheduler
             scheduler.step()
 
-        return running_loss / len(train_loader), running_metric / len(train_loader), running_acc / len(train_loader)
+        stacked_accuracies = torch.stack(conc_accuracies, dim=0).detach().cpu()
+        del conc_accuracies
+
+        return torch.mean(torch.tensor(conc_losses)), torch.mean(torch.tensor(conc_metrics)), torch.mean(stacked_accuracies, dim=0).numpy()
 
     def val_batch(self, net, val_loader, loss_fn, metric_fn, accuracies_fn, DEVICE) -> (torch.Tensor, torch.Tensor):
         net.to(DEVICE)
         net.eval()
-        running_loss = 0
-        running_metric = 0
-        running_acc = np.zeros(5)
+        conc_losses = []
+        conc_metrics = []
+        conc_accuracies = []
         with torch.no_grad():
             for batch in tqdm(val_loader, desc='Validating...'):
                 net_input = self.get_input(batch, DEVICE)
@@ -89,16 +91,19 @@ class BaseNetwork(nn.Module):
                 net_output = net(net_input)
                 del net_input
                 loss = loss_fn(net_output, labels)
-                metric = metric_fn(net_output[0], labels)
-                accuracies = accuracies_fn(net_output[0], labels)
+                metric = metric_fn(net_output[0:2], labels)
+                accuracies = accuracies_fn(net_output[0:2], labels)
                 del net_output
-                running_loss += loss.item()
-                running_metric += metric.item()
-                running_acc += accuracies.detach().cpu().numpy()
+                conc_losses.append(loss.item())
+                conc_metrics.append(metric.item())
+                conc_accuracies.append(accuracies)
                 del loss
                 del metric
 
-        return running_loss / len(val_loader), running_metric / len(val_loader), running_acc / len(val_loader)
+        stacked_accuracies = torch.stack(conc_accuracies, dim=0).detach().cpu()
+        del conc_accuracies
+
+        return torch.mean(torch.tensor(conc_losses)), torch.mean(torch.tensor(conc_metrics)), torch.mean(stacked_accuracies, dim=0).numpy()
 
     def predict_batch(self, net, test_loader, DEVICE):
         net.eval()

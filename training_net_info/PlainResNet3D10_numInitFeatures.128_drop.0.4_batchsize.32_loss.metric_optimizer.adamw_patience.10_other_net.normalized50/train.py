@@ -1,4 +1,4 @@
-from model import Model
+from vae_classifier import Model
 from dataset import TReNDS_dataset, ToTensor, AugmentDataset, fMRI_Aumentation
 import shutil
 from torch.utils.data import DataLoader, random_split

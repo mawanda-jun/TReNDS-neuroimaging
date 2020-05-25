@@ -38,7 +38,7 @@ class TReNDSLossVAE(torch.nn.Module):
     def __init__(self):
         super(TReNDSLossVAE, self).__init__()
         self.metric = TReNDSLoss()
-        self.vae = VAELoss(weight_KL=1., weight_L2=1.)
+        self.vae = VAELoss()
 
     def forward(self, outputs, labels):
         out_features, reconstructed_image, input_image, z_mean, z_var = outputs

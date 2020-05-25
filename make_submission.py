@@ -1,5 +1,5 @@
 from dataset import TReNDS_dataset, ToTensor, Normalize
-from model import Model
+from vae_classifier import Model
 
 import os
 import torch

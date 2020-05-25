@@ -7,15 +7,7 @@ import nibabel as nib
 import zlib
 from torch.utils.data import Dataset
 import torch
-from monai.transforms import \
-    RandAffine, \
-    RandGaussianNoise, \
-    RandShiftIntensity, \
-    RandSpatialCrop, \
-    Resize, \
-    RandFlip, \
-    RandScaleIntensity, \
-    RandRotate
+from monai.transforms import RandAffine, RandGaussianNoise, RandShiftIntensity, RandSpatialCrop, Resize, RandFlip, RandScaleIntensity
 
 
 class TReNDS_dataset(Dataset):
@@ -24,12 +16,10 @@ class TReNDS_dataset(Dataset):
         print('Loading dataset...')
         # Load data
         # Store the paths to the .pt file as a dictionary {patientID: complete_path_to_file}
-        self.pt_paths = {int(filename.split('.')[0]): os.path.join(pt_folder, filename) for filename in
-                         os.listdir(pt_folder)}
+        self.pt_paths = {int(filename.split('.')[0]): os.path.join(pt_folder, filename) for filename in os.listdir(pt_folder)}
 
         if fnc_path:
-            fnc = pd.read_csv(
-                fnc_path)  # There are no NaN values here (ref: https://www.kaggle.com/rftexas/trends-in-dept-understanding-eda-lgb-baseline)
+            fnc = pd.read_csv(fnc_path)  # There are no NaN values here (ref: https://www.kaggle.com/rftexas/trends-in-dept-understanding-eda-lgb-baseline)
             self.fnc = {Id: np.array(fnc.loc[fnc['Id'] == Id]).squeeze()[1:] for Id in self.pt_paths.keys()}
         else:
             self.fnc = None
@@ -43,10 +33,8 @@ class TReNDS_dataset(Dataset):
         # Check if dataset is for training or for submission
         if train_scores_path:
             train_scores = pd.read_csv(train_scores_path)
-            train_scores.fillna(train_scores.mean(),
-                                inplace=True)  # Look for NaN values and replace them with column mean
-            self.labels = {Id: np.array(train_scores.loc[train_scores['Id'] == Id]).squeeze()[1:] for Id in
-                           self.pt_paths.keys()}
+            train_scores.fillna(train_scores.mean(), inplace=True)  # Look for NaN values and replace them with column mean
+            self.labels = {Id: np.array(train_scores.loc[train_scores['Id'] == Id]).squeeze()[1:] for Id in self.pt_paths.keys()}
         else:
             self.labels = None
 
@@ -139,35 +127,34 @@ class Normalize:
     """
     Normalize brain images with mean/std calculated with Welford's algorithm
     """
-
     def __init__(self, mean_path, std_path):
-        self.mean = torch.load(mean_path).numpy()
-        self.std = torch.load(std_path).numpy()
+        self.mean = torch.load(mean_path)
+        self.std = torch.load(std_path)
         self.std[self.std == 0] = 100
 
     def __call__(self, sample, *args, **kwargs):
-        brain: np.ndarray = sample[2]
+        brain = sample[2]
         brain = (brain - self.mean) / self.std
         # Mean and variance are in float64 precision, so we need to cast `brain` to float32 again.
-        sample = *sample[0:2], brain.astype('float32'), *sample[3:]
+        sample = *sample[0:2], brain.float(), *sample[3:]
         return sample
 
 
 class fMRI_Aumentation:
     def __init__(self):
         self.rand_affine = RandAffine(
-            # mode='nearest',
+            mode='nearest',
             prob=0.5,
             # spatial_size=(52, 63, 53),  # Original spatial size
-            # translate_range=(5, 5, 5),
-            rotate_range=(np.pi * 4, np.pi * 4, np.pi * 4),
+            translate_range=(5, 5, 5),
+            rotate_range=(np.pi*4, np.pi*4, np.pi*4),
             # scale_range=(0.15, 0.15, 0.15),
-            # padding_mode='zeros',
+            padding_mode='zeros',
             as_tensor_output=False
         )
         # self.gaussian_noise = RandGaussianNoise(prob=.5)
-        self.rand_scale_intensity = RandScaleIntensity((0.9, 1.))
-        self.rand_shift_intensity = RandShiftIntensity((-0.1, 0.1))
+        # self.rand_shift_intensity = RandShiftIntensity(1., prob=0.5)
+        self.rand_scale_intensity = RandScaleIntensity(.3, prob=0.5)
         # self.rand_flip = RandFlip(spatial_axis=(0, 1, 2), prob=0.5)  # The axis is 0, 1, 2 are without colors channel
         # self.crop = RandSpatialCrop(roi_size=(35, 35, 35), random_center=True, random_size=True)
         # self.resize = Resize((52, 63, 53), mode='wrap')
@@ -176,7 +163,6 @@ class fMRI_Aumentation:
         brain: np.ndarray = sample[2]
         brain = self.rand_affine(brain, (48, 48, 48))
         brain = self.rand_scale_intensity(brain)
-        brain = self.rand_shift_intensity(brain)
         sample = *sample[0:2], brain, *sample[3:]
         return sample
 
@@ -188,17 +174,6 @@ class RandomCropToDim:
     def __call__(self, sample, *args, **kwargs):
         brain: np.ndarray = sample[2]
         brain = self.random_crop(brain)
-        sample = *sample[0:2], brain, *sample[3:]
-        return sample
-
-
-class ResizeToDim:
-    def __init__(self):
-        self.resize = Resize((48, 48, 48))
-
-    def __call__(self, sample, *args, **kwargs):
-        brain: np.ndarray = sample[2]
-        brain = self.resize(brain)
         sample = *sample[0:2], brain, *sample[3:]
         return sample
 
@@ -246,3 +221,6 @@ if __name__ == '__main__':
     for batch in tqdm(dataloader, desc='Reading dataset...'):
         print(batch[2][0].shape)
         break
+
+
+
