@@ -3,7 +3,6 @@ from h5py import File as h5File
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-import nibabel as nib
 import zlib
 from torch.utils.data import Dataset
 import torch
@@ -129,10 +128,7 @@ class ToTensor:
         if self.train:  # Add label
             new_sample = *new_sample, torch.tensor(sample[-1], dtype=torch.float32)
 
-        if self.lr_range:
-            return new_sample[2], new_sample[-1]
-        else:
-            return new_sample
+        return new_sample
 
 
 class Normalize:
@@ -159,7 +155,7 @@ class fMRI_Aumentation:
             # mode='nearest',
             prob=0.5,
             # spatial_size=(52, 63, 53),  # Original spatial size
-            # translate_range=(5, 5, 5),
+            translate_range=(5, 5, 5),
             rotate_range=(np.pi * 4, np.pi * 4, np.pi * 4),
             # scale_range=(0.15, 0.15, 0.15),
             # padding_mode='zeros',
@@ -174,7 +170,7 @@ class fMRI_Aumentation:
 
     def __call__(self, sample, *args, **kwargs):
         brain: np.ndarray = sample[2]
-        brain = self.rand_affine(brain, (48, 48, 48))
+        brain = self.rand_affine(brain, (52, 63, 53))
         brain = self.rand_scale_intensity(brain)
         brain = self.rand_shift_intensity(brain)
         sample = *sample[0:2], brain, *sample[3:]
@@ -226,16 +222,16 @@ if __name__ == '__main__':
     from torch.utils.data import DataLoader
     from torchvision import transforms
 
-    base_path = '..'
-    train_pt_folder = os.path.join(base_path, 'dataset/fMRI_train_torch')
-    test_pt_folder = os.path.join(base_path, 'dataset/fMRI_test_torch')
-    fnc_path = os.path.join(base_path, 'dataset/Kaggle/fnc.csv')
-    sbm_path = os.path.join(base_path, 'dataset/Kaggle/loading.csv')
-    # ICN_num_path = os.path.join(base_path, 'dataset/Kaggle/ICN_numbers.csv')
-    train_scores_path = os.path.join(base_path, 'dataset/Kaggle/train_scores.csv')
-    # mask_path = os.path.join(base_path, 'dataset/Kaggle/fMRI_mask.nii')
-    mean_path = os.path.join(base_path, 'dataset', 'mean.pt')
-    variance_path = os.path.join(base_path, 'dataset', 'variance.pt')
+    base_path = '/opt/dataset/'
+    train_pt_folder = os.path.join(base_path, 'fMRI_train_norm')
+    test_pt_folder = os.path.join(base_path, 'fMRI_test_torch')
+    fnc_path = os.path.join(base_path, 'Kaggle/fnc.csv')
+    sbm_path = os.path.join(base_path, 'Kaggle/loading.csv')
+    # ICN_num_path = os.path.join(base_path, 'Kaggle/ICN_numbers.csv')
+    train_scores_path = os.path.join(base_path, 'Kaggle/train_scores.csv')
+    # mask_path = os.path.join(base_path, 'Kaggle/fMRI_mask.nii')
+    mean_path = os.path.join(base_path, 'mean.pt')
+    variance_path = os.path.join(base_path, 'variance.pt')
 
     # Define transformations
     trans = transforms.Compose([ToTensor(), fMRI_Aumentation()])

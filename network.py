@@ -162,6 +162,7 @@ class CustomResNet18Siamese(BaseCustomNet3D):
         sbm, brains, fnc = inputs
         # Go with siamese network, one for each brain's color channel
         x_brain = torch.cat([F.relu(self.net_3d(brain.unsqueeze(1))) for brain in brains.transpose(1, 0)], dim=1)
+        # x_brain = F.relu(self.net_3d(brains.view(brains.size(0)*brains.size(1), 1, brains.size(2), brains.size(3), brains.size(4))).view(brains.size(0), -1))
         # Calculate features for fnc and sbm features
         x_sbm_fnc = F.relu(self.sbm_fnc_features(torch.cat([sbm, fnc], dim=1)))
         # Do dropout on both the outputs

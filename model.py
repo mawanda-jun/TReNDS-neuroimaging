@@ -16,6 +16,8 @@ from network import \
 
 from pytorchtools import EarlyStopping, TReNDSLoss, TReNDSMetric, SingleAccuracies, TReNDSLossVAE
 
+from apex import amp, optimizers
+
 import os
 import torch
 import torch.nn as nn
@@ -44,13 +46,19 @@ class Model:
 
         self.loss, self.optimizer, self.net = self.__build_model()
 
+        self.net.to(DEVICE)
+
+        self.net, self.optimizer = amp.initialize(
+            self.net,
+            self.optimizer
+        )
+
         # Define metric, loss, optimizer
         self.metric = TReNDSMetric()  # Define metric function
         self.accuracies = SingleAccuracies()  # Define single percentage function
         self.metric.requires_grad = False  # Disable grad for function since useless
         self.accuracies.require_grad = False
 
-        self.net.to(DEVICE)
 
     def __build_model(self) -> (nn.Module, nn.Module, torch.optim, nn.Module):
         # Mandatory parameters to be used.
@@ -112,7 +120,7 @@ class Model:
             optimizer_fn = torch.optim.Adam(params=network.parameters(), lr=self.lr, weight_decay=1e-2)
         elif self.optimizer == 'adamw':
             # Define the optimizer. It wants to know which parameters are being optimized.
-            optimizer_fn = torch.optim.AdamW(params=network.parameters(), lr=self.lr, weight_decay=1e-5)
+            optimizer_fn = torch.optim.AdamW(params=network.parameters(), lr=self.lr, weight_decay=1e-2)
         elif self.optimizer == 'SGD':
             optimizer_fn = torch.optim.SGD(params=network.parameters(), lr=self.lr, momentum=0.9, weight_decay=1e-7,
                                            nesterov=True)
@@ -124,7 +132,8 @@ class Model:
     def __save(self, run_path, metric, epoch):
         state = {
             'state_dict': self.net.state_dict(),
-            'optim_state': self.optimizer.state_dict()
+            'optim_state': self.optimizer.state_dict(),
+            'amp_state': amp.state_dict()
         }
         filename = 'ep_{}_checkpoint_{:.8f}.pt'.format(epoch, metric)
         filepath = os.path.join(run_path, filename)
@@ -137,7 +146,7 @@ class Model:
         on_plateau_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', patience=3,
                                                                           factor=0.5)
         # decreasing_lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.lr_decay)
-        cyclic_lr_scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=1e-4, max_lr=7e-4,
+        cyclic_lr_scheduler = torch.optim.lr_scheduler.CyclicLR(self.optimizer, base_lr=5e-5, max_lr=1e-2,
                                                                 step_size_up=len(train_loader), cycle_momentum=False,
                                                                 gamma=self.lr_decay)
 

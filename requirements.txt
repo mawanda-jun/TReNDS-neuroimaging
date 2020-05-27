@@ -1,4 +1,5 @@
 h5py
 numpy
 torch
-nibabel
+monai
+torch-lr-finder

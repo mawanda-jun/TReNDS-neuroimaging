@@ -23,36 +23,36 @@ def clean_folder(folder, metric, delta=0.02):
 
 if __name__ == '__main__':
     # Define paths
-    base_path = '..'
-    train_torch_folder = os.path.join(base_path, 'dataset/fMRI_train_norm')
-    fnc_path = os.path.join(base_path, 'dataset/Kaggle/fnc.csv')
-    sbm_path = os.path.join(base_path, 'dataset/Kaggle/loading.csv')
-    # ICN_num_path = os.path.join(base_path, 'dataset/Kaggle/ICN_numbers.csv')
-    train_scores_path = os.path.join(base_path, 'dataset/Kaggle/train_scores.csv')
-    # mask_path = os.path.join(base_path, 'dataset/Kaggle/fMRI_mask.nii')
+    base_path = '/opt/dataset'
+    train_torch_folder = os.path.join(base_path, 'fMRI_train_norm')
+    fnc_path = os.path.join(base_path, 'Kaggle/fnc.csv')
+    sbm_path = os.path.join(base_path, 'Kaggle/loading.csv')
+    # ICN_num_path = os.path.join(base_path, 'Kaggle/ICN_numbers.csv')
+    train_scores_path = os.path.join(base_path, 'Kaggle/train_scores.csv')
+    # mask_path = os.path.join(base_path, 'Kaggle/fMRI_mask.nii')
 
     # No need to normalize train set since it has already been normalized while transformed
-    mean_path = os.path.join(base_path, 'dataset', 'mean.pt')
-    variance_path = os.path.join(base_path, 'dataset', 'variance.pt')
+    mean_path = os.path.join(base_path, 'mean.pt')
+    variance_path = os.path.join(base_path, 'variance.pt')
 
     # Define training hyper parameters
-    network_type = 'VAERegularizedSiamese'
+    network_type = 'CustomResNet18Siamese'
     optimizer = 'adamw'
-    loss = 'metric_vae'
-    learning_rate = 1e-6
+    loss = 'metric'
+    learning_rate = 1e-4
     learning_rate_decay = 1.
-    batch_size = 1
+    batch_size = 24
     dropout_prob = 0.4
     patience = 10
     num_init_features = 16
 
     # Define training settings
-    train_workers = 4
+    train_workers = 6
     val_workers = 4
-    lr_range_test = True
+    lr_range_test = False
     if lr_range_test:
         train_workers = 0
-    use_fnc = False
+    use_fnc = True
 
     # Define network hyper params
     net_hyperparams = {
@@ -61,7 +61,10 @@ if __name__ == '__main__':
     }
 
     # Create dataset
-    dataset = TReNDS_dataset(train_torch_folder, sbm_path, train_scores_path=train_scores_path)
+    if use_fnc:
+        dataset = TReNDS_dataset(train_torch_folder, sbm_path, fnc_path=fnc_path, train_scores_path=train_scores_path)
+    else:
+        dataset = TReNDS_dataset(train_torch_folder, sbm_path, train_scores_path=train_scores_path)
 
     # Split dataset in train/val
     val_dim = 0.3
@@ -72,9 +75,9 @@ if __name__ == '__main__':
     train_set, val_set = random_split(dataset, [train_len, val_len])
 
     # Define transformations
-    train_trans = transforms.Compose([RandomCropToDim(), fMRI_Aumentation(), ToTensor(use_fnc=use_fnc, train=True, lr_range=lr_range_test)])
+    train_trans = transforms.Compose([fMRI_Aumentation(), ToTensor(use_fnc=use_fnc, train=True, lr_range=lr_range_test)])
     # train_trans = transforms.Compose([ToTensor(use_fnc=True, train=True)])
-    val_trans = transforms.Compose([RandomCropToDim(), ToTensor(use_fnc=use_fnc, train=True, lr_range=lr_range_test)])
+    val_trans = transforms.Compose([ToTensor(use_fnc=use_fnc, train=True, lr_range=lr_range_test)])
 
     train_set = AugmentDataset(train_set, train_trans)
     val_set = AugmentDataset(val_set, val_trans)
@@ -92,7 +95,7 @@ if __name__ == '__main__':
         network = model.net
         criterion = model.loss
         optimizer = model.optimizer
-        lr_finder = LRFinder(network, optimizer, criterion, device='cuda:0')
+        lr_finder = LRFinder(network, optimizer, criterion, device='cuda:0', memory_cache=False, cache_dir='LRFinderCache')
         lr_finder.range_test(train_loader, val_loader, end_lr=1e-1, num_iter=100)
         json.dump(lr_finder.history, open('lr_finder.json', 'w'))
         lr_finder.plot()

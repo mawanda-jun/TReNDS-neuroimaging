@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch
 from tqdm import tqdm
 import numpy as np
+from apex import amp
 
 
 class BaseNetwork(nn.Module):
@@ -57,10 +58,14 @@ class BaseNetwork(nn.Module):
             optimizer.zero_grad()
 
             # backward pass
-            loss.backward()
+            with amp.scale_loss(loss, optimizer) as scaled_loss:
+                # loss.backward()
+                scaled_loss.backward()
 
             # update optimizer
             optimizer.step()
+
+            # torch.nn.utils.clip_grad_norm_(net.parameters(), 1.)
 
             running_loss += loss.item()
             running_metric += metric.item()

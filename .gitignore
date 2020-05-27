@@ -1,4 +1,7 @@
 experiments
+.idea
+venv
+LRFinderCache
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
