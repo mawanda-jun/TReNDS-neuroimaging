@@ -3,8 +3,8 @@ from torch import nn
 import torch.nn.functional as F
 from _collections import OrderedDict
 
-from base_networks import BaseNetwork, BaseCustomNet3D, BasePlainNet3D
-from ResNet import resnet50, resnet3d_10, resnet101, resnet34, resnet18
+from base_networks import BaseNetwork, BasePlainNet3D, PlainNetSiamese
+from ResNet import resnet50, resnet3d_10, resnet101, resnet34, resnet18, resnet10_bottleneck
 from DenseNet3D import densenet121, densenet_custom, densenet161
 from vae_classifier import BrainClassifierVAE
 
@@ -12,9 +12,10 @@ from vae_classifier import BrainClassifierVAE
 class ShallowNet(BaseNetwork):
     def __init__(self,
                  dropout_prob=0.,
+                 use_apex=False
                  ):
         # inizializzazione classe base - si fa sempre
-        super().__init__()
+        super().__init__(use_apex)
 
         # definiamo i layer della rete
         self.FC1 = nn.Linear(in_features=1378 + 26, out_features=2048)
@@ -51,16 +52,12 @@ class ShallowNet(BaseNetwork):
 
         return F.relu(x)
 
-    @staticmethod
-    def get_input(batch, DEVICE):
-        # return sbm, fnc
-        return batch[1].to(DEVICE), batch[2].to(DEVICE)
 
-
-class CustomDenseNet3D(BaseCustomNet3D):
-    def __init__(self, dropout_prob=0., num_init_features=64, *args, **kwargs):
+class CustomDenseNet3D(BaseNetwork):
+    def __init__(self, dropout_prob=0., num_init_features=64,
+                 use_apex=False, *args, **kwargs):
         # inizializzazione classe base - si fa sempre
-        super().__init__()
+        super().__init__(use_apex)
         # The in-channel was 2 and out features 32, so a growth of 16. It's maybe too heavy for my computer,
         # So I apply a growth factor of 2 in the first layer
         # out_net and fc_dim can be inherited by other networks
@@ -119,13 +116,13 @@ class CustomDenseNet3D(BaseCustomNet3D):
         return F.relu(x)
 
 
-class CustomResNet3D10(BaseCustomNet3D):
+class CustomResNet3D10(BaseNetwork):
     """
     In this network I try to understand age from the sbm alone, and let the network extract the other information
     directly from the brain images.
     """
-    def __init__(self, dropout_prob=0., num_init_features=64):
-        super().__init__()
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(use_apex)
         self.net_3d = resnet3d_10(dropout_prob=dropout_prob, num_init_features=num_init_features, num_class=4)
         self.sbm_features = nn.Sequential(OrderedDict([
             ('FC1', nn.Linear(26, 256)),
@@ -140,13 +137,13 @@ class CustomResNet3D10(BaseCustomNet3D):
         return torch.cat([x_sbm, x_brain], dim=1)
 
 
-class CustomResNet18Siamese(BaseCustomNet3D):
+class CustomResNet18Siamese(BaseNetwork):
     """
     In this network I try to understand age from the sbm alone, and let the network extract the other information
     directly from the brain images.
     """
-    def __init__(self, dropout_prob=0., num_init_features=16):
-        super().__init__()
+    def __init__(self, dropout_prob=0., num_init_features=16, use_apex=False):
+        super().__init__(use_apex)
         num_brain_features = 8
         self.dropout_prob = dropout_prob
         self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features, num_class=num_brain_features)
@@ -173,13 +170,13 @@ class CustomResNet18Siamese(BaseCustomNet3D):
         return x
 
 
-class CustomResNet18SiameseMashup(BaseCustomNet3D):
+class CustomResNet18SiameseMashup(BaseNetwork):
     """
     In this network I try to understand age from the sbm alone, and let the network extract the other information
     directly from the brain images.
     """
-    def __init__(self, dropout_prob=0., num_init_features=16):
-        super().__init__()
+    def __init__(self, dropout_prob=0., num_init_features=16, use_apex=False):
+        super().__init__(use_apex)
         num_brain_features = 8
         self.dropout_prob = dropout_prob
         self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features, num_class=num_brain_features)
@@ -206,8 +203,8 @@ class CustomResNet18SiameseMashup(BaseCustomNet3D):
 
 
 class CustomResNet3D50(CustomDenseNet3D):
-    def __init__(self, dropout_prob=0., num_init_features=64):
-        super().__init__(dropout_prob)
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(dropout_prob, use_apex=use_apex)
         self.net_3d = resnet50(dropout_prob=dropout_prob, num_init_features=num_init_features)
         self.net_3d_out_dim = 2048
 
@@ -243,29 +240,64 @@ class PlainDenseNet3D161(BasePlainNet3D):
 
 
 class PlainResNet3D10(BasePlainNet3D):
-    def __init__(self, dropout_prob=0., num_init_features=64):
-        super().__init__()
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(use_apex)
         self.net_3d = resnet3d_10(num_class=5, dropout_prob=dropout_prob, num_init_features=num_init_features)
 
 
-class PlainResNet18Siamese(BaseCustomNet3D):
-    def __init__(self, dropout_prob=0., num_init_features=64):
-        super().__init__()
+class PlainResNet3D18(BasePlainNet3D):
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(use_apex)
+        self.net_3d = resnet18(num_class=5, dropout_prob=dropout_prob, num_init_features=num_init_features)
+
+
+class PlainResNet18Siamese(PlainNetSiamese):
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(use_apex)
         num_brain_features = 8
-        self.dropout_prob = dropout_prob
         self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features, num_class=num_brain_features)
-        self.regressor = nn.Linear(num_brain_features*53, 5, bias=True)
-
-    def forward(self, inputs, mask=None):
-        # Extract sbm, brains and fnc
-        _, brains, _ = inputs
-        # Go with siamese network, one for each brain's color channel
-        x_brain = torch.cat([F.relu(self.net_3d(brain.unsqueeze(1)), inplace=True) for brain in brains.transpose(1, 0)], dim=1)
-        x_brain = F.dropout(x_brain, self.dropout_prob, self.training)
-        return F.relu(self.regressor(x_brain), inplace=True)
+        self.regressor = nn.Sequential(OrderedDict([
+            ('drop', nn.Dropout(dropout_prob)),
+            ('regressor', nn.Linear(num_brain_features*53, 5, bias=True)),
+            ('relu', nn.ReLU(inplace=True))
+        ]))
 
 
-class PlainResNet18SiameseGRU(BaseCustomNet3D):
+class PlainResNet10Siamese(PlainNetSiamese):
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(use_apex)
+        self.net_3d = resnet3d_10(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features)
+        self.regressor = nn.Sequential(OrderedDict([
+            ('drop_s0', nn.Dropout(dropout_prob)),
+            ('linear_s0', nn.Linear(self.net_3d.fea_dim * 53, 2048)),
+            ('relu_s0', nn.ReLU(inplace=True)),
+            ('drop_s1', nn.Dropout(dropout_prob)),
+            ('linear_s1', nn.Linear(2048, 2048)),
+            ('relu_s1', nn.ReLU(inplace=True)),
+            ('drop_out', nn.Dropout(dropout_prob)),
+            ('regressor', nn.Linear(2048, 5)),
+            ('relu_out', nn.ReLU(inplace=True))
+        ]))
+
+
+class PlainResNet10BottleneckSiamese(PlainNetSiamese):
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(use_apex)
+        self.net_3d = resnet10_bottleneck(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features)
+        self.regressor = nn.Sequential(OrderedDict([
+            ('drop_s0', nn.Dropout(dropout_prob)),
+            ('linear_s0', nn.Linear(self.net_3d.fea_dim * 53, 2048)),
+            ('relu_s0', nn.ReLU(inplace=True)),
+            ('drop_s1', nn.Dropout(dropout_prob)),
+            ('linear_s1', nn.Linear(2048, 2048)),
+            ('relu_s1', nn.ReLU(inplace=True)),
+            ('drop_out', nn.Dropout(dropout_prob)),
+            ('regressor', nn.Linear(2048, 5)),
+            ('relu_out', nn.ReLU(inplace=True))
+        ]))
+
+
+class PlainResNet18SiameseGRU(BaseNetwork):
     def __init__(self, dropout_prob=0., num_init_features=64):
         super().__init__()
         num_brain_features = 128  # num brain features extracted by net_3d
@@ -289,14 +321,14 @@ class PlainResNet18SiameseGRU(BaseCustomNet3D):
 
 
 class PlainResNet3D34(BasePlainNet3D):
-    def __init__(self, dropout_prob=0., num_init_features=64):
-        super().__init__()
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(use_apex)
         self.net_3d = resnet34(num_class=5, dropout_prob=dropout_prob, num_init_features=num_init_features)
 
 
 class PlainResNet3D50(BasePlainNet3D):
-    def __init__(self, dropout_prob=0., num_init_features=64):
-        super().__init__()
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(use_apex)
         self.net_3d = resnet50(num_class=5, dropout_prob=dropout_prob, num_init_features=num_init_features)
 
 
@@ -313,8 +345,8 @@ class VAERegularized(BasePlainNet3D):
 
 
 class VAERegularizedSiamese(BasePlainNet3D):
-    def __init__(self, dropout_prob, num_init_features, **kwargs):
-        super(VAERegularizedSiamese, self).__init__()
+    def __init__(self, dropout_prob, num_init_features, use_apex=False, **kwargs):
+        super(VAERegularizedSiamese, self).__init__(use_apex)
         features = 8
         self.net_3d = BrainClassifierVAE(in_channels=1, input_side_dim=48, model_depth=num_init_features, num_classes=features)
         self.regressor = nn.Linear(8*53, 5)

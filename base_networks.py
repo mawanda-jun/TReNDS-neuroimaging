@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
 from tqdm import tqdm
 import numpy as np
 from apex import amp
@@ -9,15 +10,12 @@ class BaseNetwork(nn.Module):
     """
     Base class to define common methods among all networks
     """
-    def __init__(self):
+    def __init__(self, use_apex):
         # inizializzazione classe base - si fa sempre
         super().__init__()
+        self.use_apex = use_apex
 
     def forward(self, inputs, mask=None):
-        pass
-
-    @staticmethod
-    def get_input(batch, DEVICE):
         pass
 
     def train_batch(self, net, train_loader, loss_fn, metric_fn, accuracies_fn, optimizer, scheduler, DEVICE) -> (torch.Tensor, torch.Tensor):
@@ -38,9 +36,12 @@ class BaseNetwork(nn.Module):
         running_metric = 0
         running_acc = np.zeros(5)
         for batch in tqdm(train_loader, desc='Training...'):
-            net_input = self.get_input(batch, DEVICE)
+            # sbm, brain = batch[0]
+            # brain = brain.to(DEVICE)
+            # net_input = brain
+            net_input = [b.to(DEVICE) for b in batch[0]]
 
-            labels = batch[-1].to(DEVICE)
+            labels = batch[1].to(DEVICE)
 
             # forward pass
             net_output = net(net_input)
@@ -58,9 +59,11 @@ class BaseNetwork(nn.Module):
             optimizer.zero_grad()
 
             # backward pass
-            with amp.scale_loss(loss, optimizer) as scaled_loss:
-                # loss.backward()
-                scaled_loss.backward()
+            if self.use_apex:
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                loss.backward()
 
             # update optimizer
             optimizer.step()
@@ -75,11 +78,13 @@ class BaseNetwork(nn.Module):
             del metric
 
             # Update scheduler
-            scheduler.step()
+            if scheduler:
+                scheduler.step()
 
         return running_loss / len(train_loader), running_metric / len(train_loader), running_acc / len(train_loader)
 
-    def val_batch(self, net, val_loader, loss_fn, metric_fn, accuracies_fn, DEVICE) -> (torch.Tensor, torch.Tensor):
+    @staticmethod
+    def val_batch(net, val_loader, loss_fn, metric_fn, accuracies_fn, DEVICE) -> (torch.Tensor, torch.Tensor):
         net.to(DEVICE)
         net.eval()
         running_loss = 0
@@ -87,8 +92,12 @@ class BaseNetwork(nn.Module):
         running_acc = np.zeros(5)
         with torch.no_grad():
             for batch in tqdm(val_loader, desc='Validating...'):
-                net_input = self.get_input(batch, DEVICE)
-                labels = batch[-1].to(DEVICE)
+                # sbm, brain = batch[0]
+                # brain = brain.to(DEVICE)
+                net_input = [b.to(DEVICE) for b in batch[0]]
+                # net_input = brain
+                # net_input = [b.to(DEVICE) for b in batch[0]]
+                labels = batch[1].to(DEVICE)
 
                 # evaluate the network over the input
                 net_output = net(net_input)
@@ -105,13 +114,14 @@ class BaseNetwork(nn.Module):
 
         return running_loss / len(val_loader), running_metric / len(val_loader), running_acc / len(val_loader)
 
-    def predict_batch(self, net, test_loader, DEVICE):
+    @staticmethod
+    def predict_batch(net, test_loader, DEVICE):
         net.eval()
         conc_output = []
         conc_ID = []
         with torch.no_grad():
             for batch in tqdm(test_loader, desc="Predicting test set..."):
-                net_input = self.get_input(batch, DEVICE)
+                net_input = [b.to(DEVICE) for b in batch[0]]
                 conc_ID.extend(list(batch[0].detach().cpu().numpy()))
                 # evaluate the network over the input
                 conc_output.extend(list(net(net_input).detach().cpu().numpy()))
@@ -119,29 +129,30 @@ class BaseNetwork(nn.Module):
         return conc_ID, conc_output
 
 
-class BaseCustomNet3D(BaseNetwork):
-    """
-    Base class to define how input is taken for 3D networks
-    """
-    def __init__(self):
-        super().__init__()
-
-    @staticmethod
-    def get_input(batch, DEVICE):
-        # return sbm, brain, fnc
-        return batch[1].to(DEVICE), batch[2].to(DEVICE), batch[3].to(DEVICE)
-
-
 class BasePlainNet3D(BaseNetwork):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, use_apex):
+        super().__init__(use_apex=use_apex)
         self.net_3d = None  # Define plain network here
 
-    @staticmethod
-    def get_input(batch, DEVICE):
-        # return brain
-        return batch[2].to(DEVICE)
+    def forward(self, inputs, mask=None):
+        inputs = inputs[0]  # Extract brain from list of one
+        return self.net_3d(inputs)
+
+
+class PlainNetSiamese(BaseNetwork):
+    def __init__(self, use_apex=False):
+        super().__init__(use_apex)
+        self.net_3d = None
+        self.regressor = None
 
     def forward(self, inputs, mask=None):
-        return self.net_3d(inputs)
+        # Extract brains
+        brains = inputs[0]
+        # Go with siamese network, one for each brain's color channel
+        brains = torch.cat([F.relu(self.net_3d(brain.unsqueeze(1)), inplace=True) for brain in brains.transpose(1, 0)], dim=1)
+        # ALREADY TRIED THIS APPROACH, TESTED OK (BUT NOT FOR BATCHNORM). NO PERFORMANCE INCREASING FOUND.
+        # brains = brains.view(brains.size(0)*brains.size(1), brains.size(2), brains.size(3), brains.size(4)).unsqueeze(1)
+        # brains = F.relu(self.net_3d(brains))
+        # brains = brains.view(inputs[0].size(0), -1)
+        return self.regressor(brains)
 

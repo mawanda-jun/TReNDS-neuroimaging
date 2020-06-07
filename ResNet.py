@@ -3,13 +3,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-from functools import partial
+from collections import OrderedDict
+from torchvision.models.resnet import resnet18
 
 __all__ = [
-    'resnet10', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
+    'resnet10_bottleneck', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
     'resnet152', 'resnet200'
 ]
+
 
 def conv3x3x3(in_planes, out_planes, stride=1, dilation=1):
     # 3x3x3 convolution with padding
@@ -21,17 +22,6 @@ def conv3x3x3(in_planes, out_planes, stride=1, dilation=1):
         stride=stride,
         padding=dilation,
         bias=False)
-
-
-def downsample_basic_block(x, planes, stride, no_cuda=False):
-    out = F.avg_pool3d(x, kernel_size=1, stride=stride)
-    zero_pads = torch.zeros((out.size(0), planes - out.size(1), out.size(2), out.size(3), out.size(4)))
-    if not no_cuda:
-        if isinstance(out.data, torch.cuda.FloatTensor):
-            zero_pads = zero_pads.cuda()
-
-    out = Variable(torch.cat([out.data, zero_pads], dim=1))
-    return out
 
 
 class _BasicBlock(nn.Module):
@@ -71,8 +61,7 @@ class _Bottleneck(nn.Module):
         super(_Bottleneck, self).__init__()
         self.conv1 = nn.Conv3d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm3d(planes)
-        self.conv2 = nn.Conv3d(
-            planes, planes, kernel_size=3, stride=stride, dilation=dilation, padding=dilation, bias=False)
+        self.conv2 = nn.Conv3d(planes, planes, kernel_size=3, stride=stride, dilation=dilation, padding=dilation, bias=False)
         self.bn2 = nn.BatchNorm3d(planes)
         self.conv3 = nn.Conv3d(planes, planes * 4, kernel_size=1, bias=False)
         self.bn3 = nn.BatchNorm3d(planes * 4)
@@ -107,7 +96,6 @@ class ResNet3D(nn.Module):
     def __init__(self,
                  block,
                  layers,
-                 shortcut_type='B',
                  num_class=None,
                  dropout_prob=0.,
                  num_init_features=64,
@@ -119,27 +107,27 @@ class ResNet3D(nn.Module):
         super(ResNet3D, self).__init__()
 
         # 3D conv net
-        self.conv1 = nn.Conv3d(in_channels, num_init_features, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3), bias=False)
+        self.conv1 = nn.Conv3d(in_channels, num_init_features, kernel_size=7, stride=(2, 2, 2), padding=(3, 3, 3),
+                               bias=False)
         num_features = num_init_features  # copy original num_features (64)
         self.bn1 = nn.BatchNorm3d(num_features)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool3d(kernel_size=(3, 3, 3), stride=2, padding=1)
-        self.layer1 = self._make_layer(block, num_features, layers[0], shortcut_type)
+        self.layer1 = self._make_layer(block, num_features, layers[0])
         num_features *= 2  # expand num features (128)
-        self.layer2 = self._make_layer(
-            block, num_features, layers[1], shortcut_type, stride=2)
+        self.layer2 = self._make_layer(block, num_features, layers[1], stride=2)
         num_features *= 2  # expand num features (256)
-        self.layer3 = self._make_layer(
-            block, num_features, layers[2], shortcut_type, stride=1, dilation=2)
+        self.layer3 = self._make_layer(block, num_features, layers[2], stride=1, dilation=2)
         num_features *= 2  # expand num features (512)
-        self.layer4 = self._make_layer(
-            block, num_features, layers[3], shortcut_type, stride=1, dilation=4)
+        self.layer4 = self._make_layer(block, num_features, layers[3], stride=1, dilation=4)
 
         self.fea_dim = num_features * block.expansion
 
         if num_class is not None:
-            self.dropout = nn.Dropout(dropout_prob)
-            self.regressor = nn.Sequential(nn.Linear(self.fea_dim, num_class, bias=True))
+            self.regressor = nn.Sequential(OrderedDict([
+                ('drop', nn.Dropout(dropout_prob)),
+                ('regressor', nn.Linear(self.fea_dim, num_class, bias=True))
+            ]))
         else:
             self.regressor = None
 
@@ -150,24 +138,13 @@ class ResNet3D(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def _make_layer(self, block, planes, blocks, shortcut_type, stride=1, dilation=1):
+    def _make_layer(self, block, planes, blocks, stride=1, dilation=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-
-            if shortcut_type == 'A':
-                downsample = partial(
-                    downsample_basic_block,
-                    planes=planes * block.expansion,
-                    stride=stride,
-                    no_cuda=self.no_cuda)
-            else:
-                downsample = nn.Sequential(
-                    nn.Conv3d(
-                        self.inplanes,
-                        planes * block.expansion,
-                        kernel_size=1,
-                        stride=stride,
-                        bias=False), nn.BatchNorm3d(planes * block.expansion))
+            downsample = nn.Sequential(
+                    nn.Conv3d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
+                    nn.BatchNorm3d(planes * block.expansion)
+                )
 
         layers = []
         layers.append(block(self.inplanes, planes, stride=stride, dilation=dilation, downsample=downsample))
@@ -178,7 +155,7 @@ class ResNet3D(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.conv1( x)
+        x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
@@ -188,19 +165,16 @@ class ResNet3D(nn.Module):
         x = self.layer4(x)
 
         x = F.adaptive_avg_pool3d(x, (1, 1, 1))
-        emb_3d = x.view((-1, self.fea_dim))
+        out = x.view((-1, self.fea_dim))
         if self.regressor is not None:
-            out = self.dropout(emb_3d)
             out = self.regressor(out)
-        else:
-            out = emb_3d
         return out
 
 
-def resnet10(**kwargs):
+def resnet10_bottleneck(**kwargs):
     """Constructs a ResNet-18 model.
     """
-    model = ResNet3D(_BasicBlock, [1, 1, 1, 1], **kwargs)
+    model = ResNet3D(_Bottleneck, [1, 1, 1, 1], **kwargs)
     return model
 
 
