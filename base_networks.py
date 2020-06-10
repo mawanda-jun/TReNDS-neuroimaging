@@ -15,10 +15,14 @@ class BaseNetwork(nn.Module):
         super().__init__()
         self.use_apex = use_apex
 
-    def forward(self, inputs, mask=None):
+    def forward(self, inputs):
         pass
 
-    def train_batch(self, net, train_loader, loss_fn, metric_fn, accuracies_fn, optimizer, scheduler, DEVICE) -> (torch.Tensor, torch.Tensor):
+    @staticmethod
+    def get_network_inputs(batch, DEVICE):
+        return [b.to(DEVICE) for b in batch[0]]
+
+    def train_batch(self, train_loader, loss_fn, metric_fn, accuracies_fn, optimizer, scheduler, DEVICE) -> (torch.Tensor, torch.Tensor):
         """
         Define training method only once. The only method that must be done is how the training gets the training inputs
         :param net:
@@ -30,28 +34,24 @@ class BaseNetwork(nn.Module):
         :param DEVICE:
         :return:
         """
-        net.to(DEVICE)
-        net.train()
+        self.to(DEVICE)
+        self.train()
         running_loss = 0
         running_metric = 0
         running_acc = np.zeros(5)
         for batch in tqdm(train_loader, desc='Training...'):
-            # sbm, brain = batch[0]
-            # brain = brain.to(DEVICE)
-            # net_input = brain
-            net_input = [b.to(DEVICE) for b in batch[0]]
-
+            net_input = self.get_network_inputs(batch, DEVICE)
             labels = batch[1].to(DEVICE)
 
             # forward pass
-            net_output = net(net_input)
+            net_output = self.forward(net_input)
 
             del net_input
 
             # update networks
             loss = loss_fn(net_output, labels)
-            metric = metric_fn(net_output[0], labels)
-            accuracies = accuracies_fn(net_output[0], labels)
+            metric = metric_fn(net_output, labels)
+            accuracies = accuracies_fn(net_output, labels)
 
             del net_output
 
@@ -65,10 +65,10 @@ class BaseNetwork(nn.Module):
             else:
                 loss.backward()
 
+            # torch.nn.utils.clip_grad_norm_(net.parameters(), 10.)
+
             # update optimizer
             optimizer.step()
-
-            # torch.nn.utils.clip_grad_norm_(net.parameters(), 1.)
 
             running_loss += loss.item()
             running_metric += metric.item()
@@ -80,31 +80,29 @@ class BaseNetwork(nn.Module):
             # Update scheduler
             if scheduler:
                 scheduler.step()
+            # else:
+            #     break
 
         return running_loss / len(train_loader), running_metric / len(train_loader), running_acc / len(train_loader)
 
-    @staticmethod
-    def val_batch(net, val_loader, loss_fn, metric_fn, accuracies_fn, DEVICE) -> (torch.Tensor, torch.Tensor):
-        net.to(DEVICE)
-        net.eval()
+    def val_batch(self, val_loader, loss_fn, metric_fn, accuracies_fn, DEVICE) -> (torch.Tensor, torch.Tensor):
+        self.to(DEVICE)
+        self.eval()
         running_loss = 0
         running_metric = 0
         running_acc = np.zeros(5)
         with torch.no_grad():
             for batch in tqdm(val_loader, desc='Validating...'):
-                # sbm, brain = batch[0]
-                # brain = brain.to(DEVICE)
-                net_input = [b.to(DEVICE) for b in batch[0]]
-                # net_input = brain
-                # net_input = [b.to(DEVICE) for b in batch[0]]
+                net_input = self.get_network_inputs(batch, DEVICE)
                 labels = batch[1].to(DEVICE)
 
                 # evaluate the network over the input
-                net_output = net(net_input)
+                net_output = self.forward(net_input)
+
                 del net_input
                 loss = loss_fn(net_output, labels)
-                metric = metric_fn(net_output[0], labels)
-                accuracies = accuracies_fn(net_output[0], labels)
+                metric = metric_fn(net_output, labels)
+                accuracies = accuracies_fn(net_output, labels)
                 del net_output
                 running_loss += loss.item()
                 running_metric += metric.item()
@@ -154,5 +152,6 @@ class PlainNetSiamese(BaseNetwork):
         # brains = brains.view(brains.size(0)*brains.size(1), brains.size(2), brains.size(3), brains.size(4)).unsqueeze(1)
         # brains = F.relu(self.net_3d(brains))
         # brains = brains.view(inputs[0].size(0), -1)
-        return self.regressor(brains)
+        brains = torch.clamp(self.regressor(brains), -0.1, 5)
+        return brains.exp()
 
