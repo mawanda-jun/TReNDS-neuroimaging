@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from collections import OrderedDict
-from torchvision.models.resnet import resnet18
 
 __all__ = [
     'resnet10_bottleneck', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
