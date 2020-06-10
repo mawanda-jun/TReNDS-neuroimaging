@@ -16,7 +16,7 @@ from network import \
     PlainResNet18SiameseGRU, \
     VAERegularized, \
     VAERegularizedSiamese
-
+from SparseResNet import SparseResNet18
 from pytorchtools import EarlyStopping, TReNDSLoss, TReNDSMetric, SingleAccuracies, TReNDSLossVAE
 
 from apex import amp, optimizers
@@ -76,7 +76,7 @@ class Model:
 
         # Prepare gradient clipping
         # for p in self.net.parameters():
-        #     p.register_hook(lambda grad: torch.clamp(grad, 0, clip_value))
+        #     p.register_hook(lambda grad: torch.clamp(grad, -10, 10))
 
         # Define metric, loss, optimizer
         self.metric = TReNDSMetric()  # Define metric function
@@ -133,6 +133,8 @@ class Model:
             network = VAERegularized(dropout_prob, num_init_features)
         elif net_type == 'VAERegularizedSiamese':
             network = VAERegularizedSiamese(dropout_prob, num_init_features)
+        elif net_type == 'SparseResNet18':
+            network = SparseResNet18(channels=1, num_init_features=num_init_features, dropout_prob=dropout_prob, use_apex=self.use_apex)
         else:
             raise ValueError("Bad network type. Please choose ShallowNet or ...")
 
@@ -201,11 +203,11 @@ class Model:
                 print("Training epoch {}".format(i))
                 start_epoch.record()
 
-                train_loss, train_metric, train_accuracies = self.net.train_batch(self.net, train_loader, self.loss,
+                train_loss, train_metric, train_accuracies = self.net.train_batch(train_loader, self.loss,
                                                                                   self.metric, self.accuracies,
                                                                                   self.optimizer, cyclic_lr_scheduler,
                                                                                   DEVICE)
-                val_loss, val_metric, val_accuracies = self.net.val_batch(self.net, val_loader, self.loss, self.metric,
+                val_loss, val_metric, val_accuracies = self.net.val_batch(val_loader, self.loss, self.metric,
                                                                           self.accuracies, DEVICE)
 
                 end_epoch.record()
