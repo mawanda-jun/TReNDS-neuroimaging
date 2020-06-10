@@ -251,18 +251,6 @@ class PlainResNet3D18(BasePlainNet3D):
         self.net_3d = resnet18(num_class=5, dropout_prob=dropout_prob, num_init_features=num_init_features)
 
 
-class PlainResNet18Siamese(PlainNetSiamese):
-    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
-        super().__init__(use_apex)
-        num_brain_features = 8
-        self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features, num_class=num_brain_features)
-        self.regressor = nn.Sequential(OrderedDict([
-            ('drop', nn.Dropout(dropout_prob)),
-            ('regressor', nn.Linear(num_brain_features*53, 5, bias=True)),
-            ('relu', nn.ReLU(inplace=True))
-        ]))
-
-
 class PlainResNet10Siamese(PlainNetSiamese):
     def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
         super().__init__(use_apex)
@@ -276,7 +264,22 @@ class PlainResNet10Siamese(PlainNetSiamese):
             ('relu_s1', nn.ReLU(inplace=True)),
             ('drop_out', nn.Dropout(dropout_prob)),
             ('regressor', nn.Linear(2048, 5)),
-            ('relu_out', nn.ReLU(inplace=True))
+        ]))
+
+
+class PlainResNet18Siamese(PlainNetSiamese):
+    def __init__(self, dropout_prob=0., num_init_features=64, use_apex=False):
+        super().__init__(use_apex)
+        self.net_3d = resnet18(dropout_prob=dropout_prob, in_channels=1, num_init_features=num_init_features)
+        self.regressor = nn.Sequential(OrderedDict([
+            ('drop_s0', nn.Dropout(dropout_prob)),
+            ('linear_s0', nn.Linear(self.net_3d.fea_dim * 53, 2048)),
+            ('relu_s0', nn.ReLU(inplace=True)),
+            ('drop_s1', nn.Dropout(dropout_prob)),
+            ('linear_s1', nn.Linear(2048, 2048)),
+            ('relu_s1', nn.ReLU(inplace=True)),
+            ('drop_out', nn.Dropout(dropout_prob)),
+            ('regressor', nn.Linear(2048, 5)),
         ]))
 
 
