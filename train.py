@@ -1,5 +1,16 @@
 from model import Model
-from dataset import TReNDS_dataset, ToTensor, AugmentDataset, fMRI_Aumentation, Normalize, RandomCropToDim, ResizeToDim
+from dataset import \
+    TReNDS_dataset, \
+    ToTensor, \
+    AugmentDataset, \
+    fMRI_Aumentation, \
+    Normalize, \
+    RandomCropToDim, \
+    ResizeToDim, \
+    ZeroThreshold
+
+from SparseResNet import custom_collate
+
 import shutil
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
@@ -66,6 +77,9 @@ if __name__ == '__main__':
         train_workers = 0
     use_fnc = False
     use_sbm = False
+    siamese_sparse = False  # HERE
+    threshold = 3
+    roi_size = (49, 49, 49)
 
     # Create dataset
     if use_fnc and use_sbm:
@@ -85,16 +99,28 @@ if __name__ == '__main__':
     train_set, val_set = random_split(dataset, [train_len, val_len])
 
     # Define transformations
-    train_trans = transforms.Compose([fMRI_Aumentation(), ToTensor(use_sbm=use_sbm, use_fnc=use_fnc, train=True)])
+    common_trans = transforms.Compose([
+        ToTensor(use_sbm=use_sbm, use_fnc=use_fnc, train=True, siamese_sparse=False)
+    ])
+    if siamese_sparse:
+        common_trans = transforms.Compose([
+            RandomCropToDim(roi_size),
+            ZeroThreshold(threshold),
+            common_trans
+        ])
+        collate_fn = custom_collate
+    else:
+        collate_fn = None
+    train_trans = transforms.Compose([fMRI_Aumentation(), common_trans])
     # train_trans = transforms.Compose([ToTensor(use_fnc=True, train=True)])
-    val_trans = transforms.Compose([ToTensor(use_sbm=use_sbm, use_fnc=use_fnc, train=True)])
+    val_trans = common_trans
 
     train_set = AugmentDataset(train_set, train_trans)
     val_set = AugmentDataset(val_set, val_trans)
 
     # Define train and val loaders
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=train_workers)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=val_workers)
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=train_workers, collate_fn=collate_fn)
+    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=val_workers, collate_fn=collate_fn)
 
     # Define model
     model = Model(net_hyperparams=net_hyperparams, train_params=train_params)
