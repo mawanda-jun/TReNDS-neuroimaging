@@ -185,23 +185,34 @@ class fMRI_Aumentation:
 
 
 class RandomCropToDim:
-    def __init__(self):
-        self.random_crop = RandSpatialCrop(roi_size=(48, 48, 48), random_size=False)
+    def __init__(self, roi_size=(49, 49, 49)):
+        self.random_crop = RandSpatialCrop(roi_size=roi_size, random_size=False)
 
     def __call__(self, sample, *args, **kwargs):
         brain: np.ndarray = sample[1]
         brain = self.random_crop(brain)
-        sample = *sample[0:2], brain, *sample[3:]
+        sample = *sample[0:1], brain, *sample[2:]
         return sample
 
 
 class ResizeToDim:
-    def __init__(self):
-        self.resize = Resize((48, 48, 48))
+    def __init__(self, res_shape=(49, 49, 49)):
+        self.resize = Resize(res_shape)
 
     def __call__(self, sample, *args, **kwargs):
-        brain: np.ndarray = sample[2]
+        brain: np.ndarray = sample[1]
         brain = self.resize(brain)
+        sample = *sample[0:1], brain, *sample[2:]
+        return sample
+
+
+class ZeroThreshold:
+    def __init__(self, threshold=0.05):
+        self.threshold = threshold
+
+    def __call__(self, sample, *args, **kwargs):
+        brain = sample[1]
+        brain = np.where((-self.threshold < brain) & (brain < self.threshold), 0, brain)
         sample = *sample[0:1], brain, *sample[2:]
         return sample
 
@@ -241,7 +252,10 @@ if __name__ == '__main__':
     variance_path = os.path.join(base_path, 'variance.pt')
 
     # Define transformations
-    trans = transforms.Compose([ToTensor()])
+    trans = transforms.Compose([
+        ZeroThreshold(0.05),
+        ResizeToDim((49, 49, 49)),
+        ToTensor(train=True, use_sbm=False, use_fnc=False, siamese_sparse=True)])
 
     dataset = TReNDS_dataset(train_pt_folder, sbm_path, None, None, transform=trans)
     dataloader = DataLoader(dataset, batch_size=10, shuffle=False, pin_memory=True, num_workers=12)
