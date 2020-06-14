@@ -39,6 +39,7 @@ class BaseNetwork(nn.Module):
         running_loss = 0
         running_metric = 0
         running_acc = np.zeros(5)
+        norms = 0
         for batch in tqdm(train_loader, desc='Training...'):
             net_input = self.get_network_inputs(batch, DEVICE)
             labels = batch[1].to(DEVICE)
@@ -65,7 +66,8 @@ class BaseNetwork(nn.Module):
             else:
                 loss.backward()
 
-            # torch.nn.utils.clip_grad_norm_(net.parameters(), 10.)
+            # Enable in case of gradient clipping
+            # norms += torch.nn.utils.clip_grad_norm_(self.parameters(), 5.).item()
 
             # update optimizer
             optimizer.step()
@@ -82,7 +84,7 @@ class BaseNetwork(nn.Module):
                 scheduler.step()
             # else:
             #     break
-
+        # print("Training norm: {:.4f}".format(norms/len(train_loader)))
         return running_loss / len(train_loader), running_metric / len(train_loader), running_acc / len(train_loader)
 
     def val_batch(self, val_loader, loss_fn, metric_fn, accuracies_fn, DEVICE) -> (torch.Tensor, torch.Tensor):
@@ -131,10 +133,12 @@ class BasePlainNet3D(BaseNetwork):
     def __init__(self, use_apex):
         super().__init__(use_apex=use_apex)
         self.net_3d = None  # Define plain network here
+        # Set default collate_fn
+        self.collate_fn = None
 
     def forward(self, inputs, mask=None):
-        inputs = inputs[0]  # Extract brain from list of one
-        return self.net_3d(inputs)
+        brains = torch.clamp(self.net_3d(inputs[0]), -0.1, 5)
+        return brains.exp()
 
 
 class PlainNetSiamese(BaseNetwork):
@@ -142,6 +146,8 @@ class PlainNetSiamese(BaseNetwork):
         super().__init__(use_apex)
         self.net_3d = None
         self.regressor = None
+        # Set default collate_fn
+        self.collate_fn = None
 
     def forward(self, inputs, mask=None):
         # Extract brains

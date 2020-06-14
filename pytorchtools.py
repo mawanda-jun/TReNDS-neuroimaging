@@ -76,7 +76,7 @@ class EarlyStopping:
             self.best_score = val_score
             self.save_checkpoint = True
             self.val_metric_min = val_metric
-        if val_score < self.best_score + self.delta and train_score > val_score + self.delta:  # apply patience only if train is better than val scores
+        elif val_score < self.best_score + self.delta and train_score > val_score + self.delta:  # apply patience only if train is better than val scores
             self.counter += 1
             # print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:

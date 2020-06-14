@@ -1,3 +1,7 @@
+"""
+FILE IS NOT UPDATED WITH THE LAST NETWORK TYPES
+"""
+
 from dataset import TReNDS_dataset, ToTensor, Normalize
 from vae_classifier import Model
 

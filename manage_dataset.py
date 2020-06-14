@@ -35,6 +35,7 @@ class TReNDS_dataset(Dataset):
         ID = self.__num_to_id[item]
         # Retrieve all information from the Dataset initialization
         # Keep brain commented until not working on 3D images
+        # OTHER APPROACES - which are less effective.
         # brain = np.array(h5File(self.mat_paths[ID], 'r', rdcc_nbytes=30*1024**2)['SM_feature'])
         # brain = np.frombuffer(zlib.decompress(open(self.mat_paths[ID], 'rb').read()), dtype='float64').reshape(53, 52, 63, 53)
         # brain: np.ndarray = np.array(h5File(self.mat_paths[ID], 'r')['SM_feature'], dtype='float32')

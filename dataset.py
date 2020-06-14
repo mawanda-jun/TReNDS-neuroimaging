@@ -1,9 +1,7 @@
 import os
-from h5py import File as h5File
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-import zlib
 from torch.utils.data import Dataset
 import torch
 from monai.transforms import \

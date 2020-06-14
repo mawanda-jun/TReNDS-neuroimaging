@@ -16,7 +16,7 @@ from network import \
     PlainResNet18SiameseGRU, \
     VAERegularized, \
     VAERegularizedSiamese
-from SparseResNet import SparseResNet18
+from SparseResNet import CustomSiameseSparseResNet18, SparseResNet
 from pytorchtools import EarlyStopping, TReNDSLoss, TReNDSMetric, SingleAccuracies, TReNDSLossVAE
 
 from apex import amp, optimizers
@@ -133,8 +133,10 @@ class Model:
             network = VAERegularized(dropout_prob, num_init_features)
         elif net_type == 'VAERegularizedSiamese':
             network = VAERegularizedSiamese(dropout_prob, num_init_features)
-        elif net_type == 'SparseResNet18':
-            network = SparseResNet18(channels=1, num_init_features=num_init_features, dropout_prob=dropout_prob, use_apex=self.use_apex)
+        elif net_type == 'CustomSparseResNet18':
+            network = CustomSiameseSparseResNet18(channels=1, num_init_features=num_init_features, dropout_prob=dropout_prob, use_apex=self.use_apex)
+        elif net_type == 'SparseResNet':
+            network = SparseResNet(num_init_features=num_init_features, dropout_prob=dropout_prob, use_apex=self.use_apex)
         else:
             raise ValueError("Bad network type. Please choose ShallowNet or ...")
 

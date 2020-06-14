@@ -9,8 +9,6 @@ from dataset import \
     ResizeToDim, \
     ZeroThreshold
 
-from SparseResNet import custom_collate
-
 import shutil
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
@@ -49,22 +47,23 @@ if __name__ == '__main__':
     variance_path = os.path.join(base_path, 'variance.pt')
 
     # Define training hyper parameters
-    batch_size = 25
+    batch_size = 12
+
     patience = 10
 
     net_hyperparams = {
-        'dropout_prob': 0.3,
-        'num_init_features': 8  # 64
+        'dropout_prob': 0.4,
+        'num_init_features': 128
     }
     train_params = {
-        'base_lr': 1e-5,
+        'base_lr': 1.7e-5,
         'max_lr': 1e-4,
         'lr': 1e-5,
-        'lr_decay': 0.93,
+        'lr_decay': 1.,
         'use_apex': True,
-        'weight_decay': 1e-5,
-        'optimizer_type': 'adamw',
-        'network_type': 'PlainResNet10BottleneckSiamese',
+        'weight_decay': 0.,
+        'optimizer_type': 'adam',
+        'network_type': 'PlainResNet3D50',
         'loss_type': 'metric',
     }
 
@@ -77,9 +76,12 @@ if __name__ == '__main__':
         train_workers = 0
     use_fnc = False
     use_sbm = False
-    siamese_sparse = False  # HERE
-    threshold = 3
+    # Settings for sparse networks
+    sparse = False
     roi_size = (49, 49, 49)
+    # Settings for threshold
+    use_threshold = True
+    threshold = 0.05
 
     # Create dataset
     if use_fnc and use_sbm:
@@ -99,31 +101,31 @@ if __name__ == '__main__':
     train_set, val_set = random_split(dataset, [train_len, val_len])
 
     # Define transformations
-    common_trans = transforms.Compose([
-        ToTensor(use_sbm=use_sbm, use_fnc=use_fnc, train=True, siamese_sparse=False)
+    val_trans = transforms.Compose([
+        ToTensor(use_sbm=use_sbm, use_fnc=use_fnc, train=True)
     ])
-    if siamese_sparse:
-        common_trans = transforms.Compose([
-            RandomCropToDim(roi_size),
+    if use_threshold:
+        val_trans = transforms.Compose([
             ZeroThreshold(threshold),
-            common_trans
+            val_trans
         ])
-        collate_fn = custom_collate
-    else:
-        collate_fn = None
-    train_trans = transforms.Compose([fMRI_Aumentation(), common_trans])
-    # train_trans = transforms.Compose([ToTensor(use_fnc=True, train=True)])
-    val_trans = common_trans
+    if sparse:
+        val_trans = transforms.Compose([
+            RandomCropToDim(roi_size),
+            val_trans
+        ])
+
+    train_trans = transforms.Compose([fMRI_Aumentation(), val_trans])
 
     train_set = AugmentDataset(train_set, train_trans)
     val_set = AugmentDataset(val_set, val_trans)
 
-    # Define train and val loaders
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=train_workers, collate_fn=collate_fn)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=val_workers, collate_fn=collate_fn)
-
     # Define model
     model = Model(net_hyperparams=net_hyperparams, train_params=train_params)
+
+    # Define train and val loaders
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=train_workers, collate_fn=model.net.collate_fn)
+    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, pin_memory=True, num_workers=val_workers, collate_fn=model.net.collate_fn)
 
     # Use in case of start training from saved checkpoint
     # import torch
@@ -142,7 +144,7 @@ if __name__ == '__main__':
         criterion = model.loss
         optimizer = model.optimizer
         lr_finder = LRFinder(network, optimizer, criterion, device='cuda:0')
-        lr_finder.range_test(train_loader, val_loader, end_lr=1e-1, num_iter=100)
+        lr_finder.range_test(train_loader, val_loader, end_lr=1e-2, num_iter=100)
         json.dump(lr_finder.history, open('lr_finder.json', 'w'))
         lr_finder.plot()
         lr_finder.reset()
@@ -157,7 +159,8 @@ if __name__ == '__main__':
                                 '_loss.' + train_params['loss_type'] +
                                 '_optimizer.' + train_params['optimizer_type'] +
                                 '_patience.' + str(patience) +
-                                '_other_net.' + 'simpler_network')
+                                '_apex.' + str(train_params['use_apex']) +
+                                '_other_net.' + '')
 
         os.makedirs(run_path, exist_ok=False)
 
@@ -170,6 +173,7 @@ if __name__ == '__main__':
         shutil.copy('pytorchtools.py', run_path)
         shutil.copy('DenseNet3D.py', run_path)
         shutil.copy('ResNet.py', run_path)
+        shutil.copy('SparseResNet.py', run_path)
 
         # Train model
         val_metric = model.fit(15000, train_loader, val_loader, patience, run_path, last_epoch=-1)
